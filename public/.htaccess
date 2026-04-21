@@ -1,0 +1,46 @@
+# ================================================
+#  PrimeChat — .htaccess (lives in public/)
+#  DocumentRoot points here.
+# ================================================
+
+# ── Security ──
+Options -Indexes -MultiViews
+ServerSignature Off
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# ── Block access to sensitive files that shouldn't be in public anyway ──
+<FilesMatch "\.(env|ini|log|sh|sql|bak|git)$">
+    Require all denied
+</FilesMatch>
+
+# ── Rewrite Engine ──
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # ── Serve existing static files directly (CSS, JS, images, uploads) ──
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+
+    # ── Everything else → Front Controller (index.php) ──
+    RewriteRule ^ index.php [L,QSA]
+</IfModule>
+
+# ── Performance: cache static assets ──
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css              "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/jpeg            "access plus 1 year"
+    ExpiresByType image/png             "access plus 1 year"
+    ExpiresByType image/webp            "access plus 1 year"
+    ExpiresByType image/gif             "access plus 1 year"
+    ExpiresByType image/svg+xml         "access plus 1 year"
+    ExpiresByType font/woff2            "access plus 1 year"
+    ExpiresByType font/woff             "access plus 1 year"
+</IfModule>

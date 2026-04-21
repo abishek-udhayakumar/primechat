@@ -1,0 +1,188 @@
+/* ============================================
+   PrimeChat — Design Tokens (CSS Custom Properties)
+   Premium dark-first design system
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+    /* ── Typography ── */
+    --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', monospace;
+
+    --fs-xs: 0.6875rem;    /* 11px */
+    --fs-sm: 0.75rem;      /* 12px */
+    --fs-base: 0.875rem;   /* 14px */
+    --fs-md: 1rem;         /* 16px */
+    --fs-lg: 1.125rem;     /* 18px */
+    --fs-xl: 1.25rem;      /* 20px */
+    --fs-2xl: 1.5rem;      /* 24px */
+    --fs-3xl: 2rem;        /* 32px */
+    --fs-4xl: 2.5rem;      /* 40px */
+
+    --fw-light: 300;
+    --fw-regular: 400;
+    --fw-medium: 500;
+    --fw-semibold: 600;
+    --fw-bold: 700;
+
+    --lh-tight: 1.2;
+    --lh-normal: 1.5;
+    --lh-relaxed: 1.75;
+
+    /* ── Spacing (8px grid) ── */
+    --space-1: 0.25rem;    /* 4px */
+    --space-2: 0.5rem;     /* 8px */
+    --space-3: 0.75rem;    /* 12px */
+    --space-4: 1rem;       /* 16px */
+    --space-5: 1.25rem;    /* 20px */
+    --space-6: 1.5rem;     /* 24px */
+    --space-8: 2rem;       /* 32px */
+    --space-10: 2.5rem;    /* 40px */
+    --space-12: 3rem;      /* 48px */
+    --space-16: 4rem;      /* 64px */
+
+    /* ── Border Radius ── */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-2xl: 24px;
+    --radius-full: 9999px;
+
+    /* ── Shadows ── */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.2);
+    --shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.3);
+    --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
+    --shadow-glow-success: 0 0 20px rgba(34, 197, 94, 0.3);
+
+    /* ── Transitions ── */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-spring: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    /* ── Z-Index Scale ── */
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 300;
+    --z-modal: 400;
+    --z-toast: 500;
+
+    /* ── Layout ── */
+    --sidebar-width: 380px;
+    --header-height: 64px;
+    --input-height: 64px;
+    --avatar-sm: 32px;
+    --avatar-md: 40px;
+    --avatar-lg: 48px;
+    --avatar-xl: 120px;
+}
+
+/* ── Dark Theme (Default) ── */
+[data-theme="dark"], :root {
+    --color-bg-primary: #0a0a0f;
+    --color-bg-secondary: #111118;
+    --color-bg-tertiary: #1a1a24;
+    --color-bg-elevated: #1e1e2a;
+    --color-bg-hover: #252533;
+    --color-bg-active: #2d2d3f;
+    --color-bg-input: #16161f;
+
+    --color-surface: rgba(255, 255, 255, 0.03);
+    --color-surface-hover: rgba(255, 255, 255, 0.06);
+    --color-surface-active: rgba(255, 255, 255, 0.09);
+
+    --color-text-primary: #f0f0f5;
+    --color-text-secondary: #8e8ea0;
+    --color-text-tertiary: #5c5c6e;
+    --color-text-inverse: #0a0a0f;
+
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-hover: rgba(255, 255, 255, 0.15);
+    --color-border-focus: rgba(99, 102, 241, 0.5);
+
+    /* Accent / Brand */
+    --color-accent: #6366f1;
+    --color-accent-hover: #7577f5;
+    --color-accent-light: rgba(99, 102, 241, 0.15);
+    --color-accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+
+    /* Semantic */
+    --color-success: #22c55e;
+    --color-success-light: rgba(34, 197, 94, 0.15);
+    --color-warning: #f59e0b;
+    --color-warning-light: rgba(245, 158, 11, 0.15);
+    --color-danger: #ef4444;
+    --color-danger-light: rgba(239, 68, 68, 0.15);
+    --color-info: #3b82f6;
+    --color-info-light: rgba(59, 130, 246, 0.15);
+
+    /* Chat Bubbles */
+    --color-bubble-sent: #6366f1;
+    --color-bubble-sent-text: #ffffff;
+    --color-bubble-received: #1e1e2a;
+    --color-bubble-received-text: #f0f0f5;
+
+    /* Online Status */
+    --color-online: #22c55e;
+    --color-offline: #5c5c6e;
+    --color-away: #f59e0b;
+
+    /* Glassmorphism */
+    --glass-bg: rgba(17, 17, 24, 0.8);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-blur: 20px;
+
+    /* Chat Wallpapers */
+    --wallpaper-default: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
+                         radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                         var(--color-bg-primary);
+
+    /* Scrollbar */
+    --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+    --scrollbar-track: transparent;
+}
+
+/* ── Light Theme ── */
+[data-theme="light"] {
+    --color-bg-primary: #f8f9fc;
+    --color-bg-secondary: #ffffff;
+    --color-bg-tertiary: #f0f2f5;
+    --color-bg-elevated: #ffffff;
+    --color-bg-hover: #f0f2f5;
+    --color-bg-active: #e4e6eb;
+    --color-bg-input: #f0f2f5;
+
+    --color-surface: rgba(0, 0, 0, 0.02);
+    --color-surface-hover: rgba(0, 0, 0, 0.04);
+    --color-surface-active: rgba(0, 0, 0, 0.06);
+
+    --color-text-primary: #1a1a2e;
+    --color-text-secondary: #65657b;
+    --color-text-tertiary: #9ca3af;
+    --color-text-inverse: #ffffff;
+
+    --color-border: rgba(0, 0, 0, 0.08);
+    --color-border-hover: rgba(0, 0, 0, 0.15);
+    --color-border-focus: rgba(99, 102, 241, 0.5);
+
+    --color-bubble-received: #f0f2f5;
+    --color-bubble-received-text: #1a1a2e;
+
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(0, 0, 0, 0.08);
+
+    --wallpaper-default: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 60%),
+                         radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+                         var(--color-bg-primary);
+
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+
+    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+}

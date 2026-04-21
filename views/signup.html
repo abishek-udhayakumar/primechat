@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Create your PrimeChat account — Premium real-time messaging">
+    <title>Sign Up — PrimeChat</title>
+    <link rel="stylesheet" href="/css/variables.css">
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/auth.css">
+    <div id="toastContainer" class="toast-container"></div>
+</head>
+<body>
+    <main class="auth-page">
+        <div class="auth-card">
+            <!-- Logo -->
+            <div class="auth-logo">
+                <div class="auth-logo-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <span class="auth-logo-text">PrimeChat</span>
+            </div>
+
+            <h1 class="auth-title">Create account</h1>
+            <p class="auth-subtitle">Start chatting in seconds</p>
+
+            <!-- Error Banner -->
+            <div id="authError" class="auth-error-banner"></div>
+
+            <form id="signupForm" class="auth-form" novalidate>
+                <div class="form-group">
+                    <label class="form-label" for="display_name">Full Name</label>
+                    <input type="text" id="display_name" name="display_name" class="form-input"
+                           placeholder="John Doe" autocomplete="name" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" name="username" class="form-input"
+                           placeholder="john_doe" autocomplete="username" required minlength="3" maxlength="50">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="email">Email</label>
+                    <input type="email" id="email" name="email" class="form-input"
+                           placeholder="you@example.com" autocomplete="email" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="phone">Phone <span style="opacity:0.5;font-weight:400;text-transform:none;">(optional)</span></label>
+                    <input type="tel" id="phone" name="phone" class="form-input"
+                           placeholder="+91 98765 43210" autocomplete="tel">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                           placeholder="Min. 6 characters" autocomplete="new-password" required minlength="6">
+                </div>
+
+                <button type="submit" class="auth-submit" id="signupBtn">
+                    <span id="signupBtnText">Create Account</span>
+                    <div class="spinner spinner--sm hidden" id="signupSpinner"></div>
+                </button>
+            </form>
+
+            <div class="auth-link-row">
+                Already have an account? <a href="/login" class="auth-link">Sign in</a>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/utils.js"></script>
+    <script src="/js/auth.js"></script>
+</body>
+</html>
