@@ -6,9 +6,18 @@
 'use strict';
 
 // ── Polling state ──
-let _pollTimer    = null;
-let _typingTimer  = null;
-let _isSending    = false;
+let _pollTimeout = null;
+let _typingTimer = null;
+let _typingDebounceTimer = null;
+let _isSending = false;
+let _isLoadingOlder = false;
+let _hasMoreHistory = true;
+let _lastActivity = Date.now();
+let _lastMessageReceivedAt = Date.now();
+const POLL_INTERVAL_FAST = 1000;
+const POLL_INTERVAL_ACTIVE = 3000;
+const POLL_INTERVAL_IDLE = 10000;
+const IDLE_THRESHOLD = 30000; // 30s
 
 // ── Initialize chat module ──
 window.initChat = () => {
@@ -27,13 +36,15 @@ window.openConversation = async (conversationId, otherUser) => {
 
     // Reset state
     Object.assign(window.appState, {
-        activeConversationId : conversationId,
-        activeOtherUser      : otherUser,
-        messages             : [],
-        lastMessageId        : 0,
-        replyingTo           : null,
-        isTyping             : false,
+        activeConversationId: conversationId,
+        activeOtherUser: otherUser,
+        messages: [],
+        lastMessageId: 0,
+        replyingTo: null,
+        isTyping: false,
     });
+    _isLoadingOlder = false;
+    _hasMoreHistory = true;
 
     cancelReply();
 
@@ -79,8 +90,9 @@ async function _loadInitialMessages() {
         const res = await api(`/chat/messages?conversation_id=${convId}&limit=50`);
         if (!res?.success) return;
 
-        window.appState.messages      = res.data.messages || [];
+        window.appState.messages = (res.data.ms || []).map(_remapMessage);
         window.appState.lastMessageId = _lastId(window.appState.messages);
+        _hasMoreHistory = res.data.hm;
 
         renderMessages();
         scrollToBottom(false);
@@ -90,49 +102,165 @@ async function _loadInitialMessages() {
     }
 }
 
+async function _loadOlderMessages() {
+    if (_isLoadingOlder || !_hasMoreHistory) return;
+
+    const convId = window.appState.activeConversationId;
+    const firstMsg = window.appState.messages[0];
+    if (!convId || !firstMsg || typeof firstMsg.id !== 'number') return;
+
+    _isLoadingOlder = true;
+    const container = document.getElementById('messagesContainer');
+    const oldScrollHeight = container.scrollHeight;
+
+    try {
+        const res = await api(`/chat/messages?conversation_id=${convId}&before_id=${firstMsg.id}&limit=50`);
+        if (res?.success) {
+            const oldMsgs = (res.data.ms || []).map(_remapMessage);
+            _hasMoreHistory = res.data.hm;
+
+            if (oldMsgs.length > 0) {
+                window.appState.messages = [...oldMsgs, ...window.appState.messages];
+                
+                // Prepend to DOM
+                if (typeof window._prependMessages === 'function') {
+                    window._prependMessages(oldMsgs);
+                } else {
+                    renderMessages(); // fallback
+                }
+
+                // Immediate scroll restoration
+                const newScrollHeight = container.scrollHeight;
+                container.scrollTop = newScrollHeight - oldScrollHeight;
+                
+                // Frame-perfect stability fix
+                requestAnimationFrame(() => {
+                    container.scrollTop = container.scrollHeight - oldScrollHeight;
+                });
+            }
+        }
+    } catch (e) {
+        console.error('[PrimeChat] History load failed:', e);
+    } finally {
+        _isLoadingOlder = false;
+    }
+}
+
+function _remapMessage(m) {
+    if (!m || m._remapped) return m;
+    const res = {
+        id: m.i,
+        conversation_id: m.ci,
+        sender_id: m.si,
+        sender_name: m.sn,
+        sender_avatar: m.sa,
+        content: m.c,
+        type: m.t,
+        is_mine: m.im,
+        is_edited: m.ie,
+        is_deleted_for_everyone: m.id,
+        forwarded_from_id: m.ff,
+        read_status: m.rs,
+        created_at: m.ca,
+        client_msg_id: m.cm,
+        _remapped: true
+    };
+    if (m.re) {
+        res.reply = {
+            id: m.re.i,
+            content: m.re.c,
+            sender_id: m.re.si,
+            sender_name: m.re.sn,
+            type: m.re.t
+        };
+    }
+    if (m.at) {
+        res.attachment = {
+            id: m.at.i,
+            file_name: m.at.n,
+            file_path: m.at.p,
+            file_type: m.at.t,
+            file_size: m.at.s,
+            width: m.at.w,
+            height: m.at.h,
+            duration: m.at.d
+        };
+    }
+    return res;
+}
+
 // ─────────────────────────────────────────
 // POLLING — single /api/chat/poll call
 // ─────────────────────────────────────────
 function _startPolling() {
     _stopPolling();
     _poll(); // immediate first call
-    _pollTimer = setInterval(_poll, 2500);
 }
 
 function _stopPolling() {
-    if (_pollTimer) {
-        clearInterval(_pollTimer);
-        _pollTimer = null;
+    if (_pollTimeout) {
+        clearTimeout(_pollTimeout);
+        _pollTimeout = null;
     }
 }
 
-async function _poll() {
-    const convId  = window.appState.activeConversationId;
-    const lastId  = window.appState.lastMessageId || 0;
-    if (!convId) return;
+function _getPollInterval() {
+    if (document.hidden || !window.appState.activeConversationId) return POLL_INTERVAL_IDLE;
 
-    // Don't poll when tab is hidden — save resources
-    if (document.visibilityState === 'hidden') return;
+    const idleTime = Date.now() - _lastActivity;
+    const timeSinceLastMsg = Date.now() - _lastMessageReceivedAt;
+
+    // If a message just arrived, poll faster for 10s to catch replies
+    if (timeSinceLastMsg < 10000) return POLL_INTERVAL_FAST;
+
+    // If user is away/idle, slow down
+    if (idleTime > IDLE_THRESHOLD) return POLL_INTERVAL_IDLE;
+    
+    return POLL_INTERVAL_ACTIVE;
+}
+
+async function _poll() {
+    const convId = window.appState.activeConversationId;
+    const lastId = window.appState.lastMessageId || 0;
+    
+    // STOP polling if no active chat or tab is background
+    if (!convId || document.visibilityState === 'hidden') {
+        _pollTimeout = setTimeout(_poll, POLL_INTERVAL_IDLE);
+        return;
+    }
 
     try {
         const res = await api(`/chat/poll?conversation_id=${convId}&last_id=${lastId}`);
         if (!res?.success) return;
 
-        const { messages, typing, other_user_status, other_last_seen, other_last_read } = res.data;
+        const { ms: shorthandMsgs, ty, us, ls, lr } = res.data;
+        const messages = (shorthandMsgs || []).map(_remapMessage);
+        const typing = ty;
+        const other_user_status = us;
+        const other_last_seen = ls;
+        const other_last_read = lr;
+
+        if (messages.length > 0) {
+            _lastMessageReceivedAt = Date.now();
+        }
 
         // ── Update header status / typing ──
         _updateHeaderStatus({ typing, other_user_status, other_last_seen });
         _toggleTypingBubble(typing);
 
-        // ── Update read-receipt ticks on existing sent messages ──
-        if (other_last_read != null) {
-            _updateReadTicks(other_last_read);
-        }
+        // ── Update read-receipt ticks ──
+        _updateReadTicks(other_last_read);
 
         // ── Append genuinely new messages ──
         if (messages && messages.length > 0) {
             const existingIds = new Set(window.appState.messages.map(m => m.id));
-            const newMsgs     = messages.filter(m => !existingIds.has(m.id));
+            const existingClientIds = new Set(window.appState.messages.filter(m => m.client_msg_id).map(m => m.client_msg_id));
+
+            const newMsgs = messages.filter(m => {
+                if (existingIds.has(m.id)) return false;
+                if (m.client_msg_id && existingClientIds.has(m.client_msg_id)) return false;
+                return true;
+            });
 
             if (newMsgs.length > 0) {
                 const wasAtBottom = _isAtBottom();
@@ -154,11 +282,15 @@ async function _poll() {
                 if (!newMsgs[newMsgs.length - 1].is_mine) {
                     _playSound();
                 }
-
             }
         }
     } catch (e) {
         console.error('[PrimeChat] Poll error:', e);
+    } finally {
+        // Schedule next poll adaptively
+        if (window.appState.activeConversationId) {
+            _pollTimeout = setTimeout(_poll, _getPollInterval());
+        }
     }
 }
 
@@ -168,36 +300,39 @@ async function _poll() {
 async function sendMessage(content = null, type = 'text') {
     if (_isSending) return;
 
-    const input      = document.getElementById('messageInput');
+    const input = document.getElementById('messageInput');
     const msgContent = content || input?.value?.trim();
 
     if (!msgContent && type === 'text') return;
 
     const convId = window.appState.activeConversationId;
-    const other  = window.appState.activeOtherUser;
+    const other = window.appState.activeOtherUser;
 
     if (!convId && !other) return;
 
-    const reqBody = { content: msgContent, type };
-    if (convId)              reqBody.conversation_id = convId;
-    else if (other)          reqBody.recipient_id    = other.id;
+    // Generate unique client-side ID for deduplication
+    const clientMsgId = 'c_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+
+    const reqBody = { content: msgContent, type, client_msg_id: clientMsgId };
+    if (convId) reqBody.conversation_id = convId;
+    else if (other) reqBody.recipient_id = other.id;
     if (window.appState.replyingTo) reqBody.reply_to_id = window.appState.replyingTo.id;
 
     // ── Optimistic update ──
-    const tempId  = 'temp_' + Date.now();
+    const tempId = clientMsgId; // Use clientMsgId as tempId for consistency
     const tempMsg = {
-        id          : tempId,
-        sender_id   : window.appState.user.id,
-        content     : msgContent,
+        id: tempId,
+        sender_id: window.appState.user.id,
+        content: msgContent,
         type,
-        is_mine     : true,
-        is_edited   : false,
-        read_status : 'sent',
-        created_at  : new Date().toISOString(),
-        reply       : window.appState.replyingTo
+        is_mine: true,
+        is_edited: false,
+        read_status: 'sent',
+        created_at: new Date().toISOString(),
+        reply: window.appState.replyingTo
             ? { content: window.appState.replyingTo.content, sender_name: 'You' }
             : null,
-        attachment  : null,
+        attachment: null,
     };
 
     // Clear input immediately
@@ -225,7 +360,8 @@ async function sendMessage(content = null, type = 'text') {
             }
 
             // Replace temp message with server-confirmed message
-            _replaceTempMessage(tempId, res.data.message);
+            const confirmedMsg = _remapMessage(res.data.message);
+            _replaceTempMessage(tempId, confirmedMsg);
             window.appState.lastMessageId = _lastId(window.appState.messages);
             loadConversations();
         }
@@ -248,13 +384,19 @@ function notifyTyping(isTyping) {
     const convId = window.appState.activeConversationId;
     if (!convId) return;
 
-    if (window.appState.isTyping === isTyping) return;
-    window.appState.isTyping = isTyping;
+    _lastActivity = Date.now(); // Track activity
 
-    api('/chat/typing', {
-        method : 'POST',
-        body   : { conversation_id: convId, is_typing: isTyping }
-    }).catch(() => {});
+    if (window.appState.isTyping === isTyping) return;
+
+    // Debounce typing notifications to the server
+    clearTimeout(_typingDebounceTimer);
+    _typingDebounceTimer = setTimeout(() => {
+        window.appState.isTyping = isTyping;
+        api('/chat/typing', {
+            method: 'POST',
+            body: { conversation_id: convId, is_typing: isTyping }
+        }).catch(() => { });
+    }, isTyping ? 500 : 0);
 
     if (isTyping) {
         clearTimeout(_typingTimer);
@@ -266,7 +408,7 @@ function notifyTyping(isTyping) {
 // MARK AS READ
 // ─────────────────────────────────────────
 function _markLastRead() {
-    const msgs  = window.appState.messages;
+    const msgs = window.appState.messages;
     if (!msgs.length) return;
 
     const convId = window.appState.activeConversationId;
@@ -277,9 +419,9 @@ function _markLastRead() {
     if (!last) return;
 
     api('/chat/read', {
-        method : 'POST',
-        body   : { conversation_id: convId, message_id: last.id }
-    }).catch(() => {});
+        method: 'POST',
+        body: { conversation_id: convId, message_id: last.id }
+    }).catch(() => { });
 }
 
 async function markAsRead(messageId) {
@@ -287,8 +429,8 @@ async function markAsRead(messageId) {
     if (!convId) return;
     try {
         await api('/chat/read', {
-            method : 'POST',
-            body   : { conversation_id: convId, message_id: messageId }
+            method: 'POST',
+            body: { conversation_id: convId, message_id: messageId }
         });
         loadConversations();
     } catch (e) { /* silent */ }
@@ -314,7 +456,7 @@ function _isAtBottom() {
 
 function _showScrollBadge(count) {
     const badge = document.getElementById('scrollBottomBadge');
-    const btn   = document.getElementById('scrollBottomBtn');
+    const btn = document.getElementById('scrollBottomBtn');
     if (!badge || !btn) return;
     badge.textContent = (parseInt(badge.textContent || '0') + count).toString();
     badge.classList.remove('hidden');
@@ -336,7 +478,7 @@ window.replyToMessage = (messageId) => {
 
     let preview = msg.content || '';
     if (msg.type === 'image') preview = '📷 Photo';
-    else if (msg.type === 'file')  preview = '📎 File';
+    else if (msg.type === 'file') preview = '📎 File';
     else if (msg.type === 'voice') preview = '🎤 Voice message';
     if (textEl) textEl.textContent = preview;
 
@@ -391,7 +533,7 @@ function _updateReadTicks(otherLastRead) {
                 const tick = el.querySelector('.message-ticks');
                 if (tick) {
                     tick.className = `message-ticks ${newStatus}`;
-                    tick.innerHTML  = _tickSVG(newStatus);
+                    tick.innerHTML = _tickSVG(newStatus);
                 }
             }
         }
@@ -399,15 +541,15 @@ function _updateReadTicks(otherLastRead) {
 }
 
 function _updateHeader(user) {
-    const nameEl   = document.getElementById('chatHeaderName');
+    const nameEl = document.getElementById('chatHeaderName');
     const avatarEl = document.getElementById('chatHeaderAvatar');
     const statusEl = document.getElementById('chatHeaderStatus');
 
-    if (nameEl)   nameEl.textContent  = user.display_name || user.username;
-    if (avatarEl) avatarEl.innerHTML  = createAvatar(user);
+    if (nameEl) nameEl.textContent = user.display_name || user.username;
+    if (avatarEl) avatarEl.innerHTML = createAvatar(user);
     if (statusEl) {
-        statusEl.textContent  = user.status === 'online' ? 'online' : 'last seen recently';
-        statusEl.className    = `chat-header-status${user.status === 'online' ? ' online' : ''}`;
+        statusEl.textContent = user.status === 'online' ? 'online' : 'last seen recently';
+        statusEl.className = `chat-header-status${user.status === 'online' ? ' online' : ''}`;
     }
 }
 
@@ -417,34 +559,34 @@ function _updateHeaderStatus({ typing, other_user_status, other_last_seen }) {
 
     if (typing) {
         el.textContent = 'typing...';
-        el.className   = 'chat-header-status typing';
+        el.className = 'chat-header-status typing';
     } else if (other_user_status === 'online') {
         el.textContent = 'online';
-        el.className   = 'chat-header-status online';
+        el.className = 'chat-header-status online';
     } else {
         el.textContent = other_last_seen ? `last seen ${_formatLastSeen(other_last_seen)}` : 'offline';
-        el.className   = 'chat-header-status';
+        el.className = 'chat-header-status';
     }
 }
 
 function _formatLastSeen(ts) {
     if (!ts) return 'a while ago';
-    const d   = new Date(ts);
+    const d = new Date(ts);
     const now = new Date();
     const diffMin = Math.floor((now - d) / 60000);
-    if (diffMin < 1)   return 'just now';
-    if (diffMin < 60)  return `${diffMin}m ago`;
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24)    return `${diffH}h ago`;
+    if (diffH < 24) return `${diffH}h ago`;
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function _toggleTypingBubble(isTyping) {
     const container = document.getElementById('messagesContainer');
     if (!container) return;
-    
+
     let bubble = document.getElementById('typingBubble');
-    
+
     if (isTyping) {
         if (!bubble) {
             bubble = document.createElement('div');
@@ -461,8 +603,8 @@ function _toggleTypingBubble(isTyping) {
 
 function _playSound() {
     try {
-        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
-        const osc  = ctx.createOscillator();
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain); gain.connect(ctx.destination);
         osc.frequency.value = 880;
@@ -484,7 +626,7 @@ function _tickSVG(status) {
 // EVENT BINDING
 // ─────────────────────────────────────────
 function _bindInputHandlers() {
-    const input   = document.getElementById('messageInput');
+    const input = document.getElementById('messageInput');
     const sendBtn = document.getElementById('sendBtn');
 
     input?.addEventListener('input', function () {
@@ -509,6 +651,13 @@ function _bindInputHandlers() {
 function _bindScrollHandlers() {
     const container = document.getElementById('messagesContainer');
     container?.addEventListener('scroll', () => {
+        _lastActivity = Date.now(); // Track activity
+        
+        // Trigger lazy load when near top
+        if (container.scrollTop < 100 && !_isLoadingOlder && _hasMoreHistory) {
+            _loadOlderMessages();
+        }
+
         if (_isAtBottom()) {
             document.getElementById('scrollBottomBtn')?.classList.remove('show');
             _markLastRead();
@@ -522,10 +671,10 @@ function _bindPanelHandlers() {
     document.getElementById('chatInfoBtn')?.addEventListener('click', () => {
         const user = window.appState.activeOtherUser;
         if (!user) return;
-        document.getElementById('infoAvatar').innerHTML   = createAvatar(user, 'avatar--xl');
-        document.getElementById('infoName').textContent   = user.display_name;
+        document.getElementById('infoAvatar').innerHTML = createAvatar(user, 'avatar--xl');
+        document.getElementById('infoName').textContent = user.display_name;
         document.getElementById('infoUsername').textContent = '@' + user.username;
-        document.getElementById('infoAbout').textContent  = user.about || 'Available';
+        document.getElementById('infoAbout').textContent = user.about || 'Available';
         document.getElementById('userInfoPanel')?.classList.add('show');
     });
     document.getElementById('closeUserInfoBtn')?.addEventListener('click', () => {

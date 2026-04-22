@@ -20,6 +20,11 @@ class Response {
             $response['data'] = $data;
         }
 
+        // Add latency metadata
+        if (defined('APP_START_TIME')) {
+            $response['latency_ms'] = round((microtime(true) - APP_START_TIME) * 1000, 2);
+        }
+
         echo json_encode($response, JSON_UNESCAPED_UNICODE);
         exit;
     }
@@ -37,6 +42,11 @@ class Response {
         ];
         if ($errors !== null) {
             $response['errors'] = $errors;
+        }
+
+        // Log API errors (non-4xx usually indicate server issues or critical failures)
+        if ($code >= 500) {
+            Logger::error("API Error $code: $message", ['errors' => $errors]);
         }
 
         echo json_encode($response, JSON_UNESCAPED_UNICODE);

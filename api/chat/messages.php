@@ -38,62 +38,22 @@ $otherLastRead = $msgModel->getReadStatusBatch($conversationId, $userId);
 // Format messages
 $formatted = [];
 foreach ($messages as $msg) {
-    $readStatus = 'sent';
-    if ((int)$msg['sender_id'] === $userId) {
-        if ($otherLastRead !== null && $otherLastRead >= (int)$msg['id']) {
-            $readStatus = 'read';
+    $item = Message::formatShorthand($msg, $userId);
+    
+    // Custom read status logic for history
+    if ($item['im']) {
+        if ($otherLastRead !== null && $otherLastRead >= $item['i']) {
+            $item['rs'] = 'read';
         } else {
-            $readStatus = 'delivered';
+            $item['rs'] = 'delivered';
         }
     }
-
-    $attachment = null;
-    if ($msg['attachment_id']) {
-        $attachment = [
-            'id'        => $msg['attachment_id'],
-            'file_name' => $msg['attachment_file_name'],
-            'file_path' => $msg['attachment_file_path'],
-            'file_type' => $msg['attachment_file_type'],
-            'file_size' => $msg['attachment_file_size'],
-            'width'     => $msg['attachment_width'],
-            'height'    => $msg['attachment_height'],
-            'duration'  => $msg['attachment_duration'],
-        ];
-    }
-
-    $reply = null;
-    if ($msg['reply_to_id']) {
-        $reply = [
-            'id'          => $msg['reply_to_id'],
-            'content'     => $msg['reply_content'],
-            'sender_id'   => $msg['reply_sender_id'],
-            'sender_name' => $msg['reply_sender_name'],
-            'type'        => $msg['reply_type'],
-        ];
-    }
-
-    $formatted[] = [
-        'id'                    => (int) $msg['id'],
-        'conversation_id'      => (int) $msg['conversation_id'],
-        'sender_id'            => (int) $msg['sender_id'],
-        'content'              => $msg['is_deleted_for_everyone'] ? null : $msg['content'],
-        'type'                 => $msg['type'],
-        'is_mine'              => (int) $msg['sender_id'] === $userId,
-        'is_edited'            => (bool) $msg['is_edited'],
-        'is_deleted_for_everyone' => (bool) $msg['is_deleted_for_everyone'],
-        'forwarded_from_id'    => $msg['forwarded_from_id'] ? (int) $msg['forwarded_from_id'] : null,
-        'reply'                => $reply,
-        'attachment'           => $attachment,
-        'read_status'          => $readStatus,
-        'sender_name'          => $msg['sender_display_name'],
-        'sender_avatar'        => $msg['sender_avatar_url'],
-        'created_at'           => $msg['created_at'],
-        'updated_at'           => $msg['updated_at'],
-    ];
+    
+    $formatted[] = $item;
 }
 
 Response::success([
-    'messages'        => $formatted,
-    'conversation_id' => $conversationId,
-    'has_more'        => count($formatted) >= $limit,
+    'ms' => $formatted,
+    'ci' => $conversationId,
+    'hm' => count($formatted) >= $limit,
 ]);

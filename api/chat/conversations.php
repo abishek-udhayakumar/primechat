@@ -30,26 +30,26 @@ foreach ($conversations as $conv) {
     }
 
     $formatted[] = [
-        'conversation_id'    => $conv['conversation_id'],
-        'type'               => $conv['type'],
-        'other_user'         => [
-            'id'           => $conv['other_user_id'],
-            'username'     => $conv['other_username'],
-            'display_name' => $conv['other_display_name'],
-            'avatar_url'   => $conv['other_avatar_url'],
-            'status'       => $conv['other_status'],
-            'last_seen'    => $conv['other_last_seen'],
+        'i'  => $conv['conversation_id'], // id
+        't'  => $conv['type'],            // type
+        'u'  => [                         // user
+            'i'  => $conv['other_user_id'],
+            'u'  => $conv['other_username'],
+            'n'  => $conv['other_display_name'],
+            'a'  => $conv['other_avatar_url'],
+            's'  => $conv['other_status'],
+            'l'  => $conv['other_last_seen'],
         ],
-        'last_message'       => [
-            'id'        => $conv['last_message_id'],
-            'content'   => $lastMessagePreview,
-            'type'      => $conv['last_message_type'],
-            'sender_id' => $conv['last_message_sender_id'],
-            'is_mine'   => (int)$conv['last_message_sender_id'] === $userId,
-            'time'      => $conv['last_message_time'],
+        'm'  => [                         // message
+            'i'  => $conv['last_message_id'],
+            'c'  => $lastMessagePreview,
+            'ty' => $conv['last_message_type'],
+            'si' => $conv['last_message_sender_id'],
+            'im' => (int)$conv['last_message_sender_id'] === $userId,
+            'tm' => $conv['last_message_time'],
         ],
-        'unread_count'       => (int) $conv['unread_count'],
+        'uc' => (int) $conv['unread_count'], // unread_count
     ];
 }
 
-Response::success(['conversations' => $formatted]);
+Response::success(['cs' => $formatted]);

@@ -67,6 +67,12 @@
     transition: background var(--transition-fast);
 }
 
+@media (max-width: 480px) {
+    .message-bubble {
+        max-width: 88%;
+    }
+}
+
 /* Sent bubble */
 .message.sent .message-bubble {
     background: var(--color-bubble-sent);

@@ -19,6 +19,9 @@ window.initMessages = () => {
 // ─────────────────────────────────────────
 // FULL RENDER — initial load only
 // ─────────────────────────────────────────
+const DOM_MESSAGE_LIMIT = 200;
+
+// ── Render all messages ──
 window.renderMessages = () => {
     const container = document.getElementById('messagesContainer');
     if (!container) return;
@@ -66,7 +69,92 @@ window._appendMessages = (msgs, container) => {
     });
 
     if (typingBubble) container.appendChild(typingBubble);
+
+    _pruneDOM();
 };
+
+// ─────────────────────────────────────────
+// PREPEND MESSAGES — older history
+// ─────────────────────────────────────────
+window._prependMessages = (msgs) => {
+    const container = document.getElementById('messagesContainer');
+    if (!container || !msgs.length) return;
+
+    // We need to be careful with date dividers. 
+    // The easiest way to prepend correctly while maintaining grouping/dividers 
+    // is to create a temporary fragment, build it, and insert at the top.
+    const fragment = document.createDocumentFragment();
+    
+    let lastDate = null;
+    let lastSender = null;
+
+    msgs.forEach((msg, idx) => {
+        const msgDate = _dateKey(msg.created_at);
+        if (msgDate !== lastDate) {
+            fragment.appendChild(_makeDateDivider(_friendlyDate(msg.created_at), msgDate));
+            lastDate = msgDate;
+            lastSender = null;
+        }
+
+        const isSameGroup = lastSender === msg.sender_id;
+        fragment.appendChild(_buildBubble(msg, isSameGroup));
+        lastSender = msg.sender_id;
+    });
+
+    // Check if the last prepended message needs to be grouped with the previously "first" message
+    const firstExisting = container.querySelector('.message[data-msg-id]');
+    if (firstExisting) {
+        const firstExistingId = firstExisting.dataset.msgId;
+        const firstExistingMsg = window.appState.messages.find(m => m.id == firstExistingId);
+        const lastPrependedMsg = msgs[msgs.length - 1];
+        
+        if (firstExistingMsg && lastPrependedMsg && 
+            firstExistingMsg.sender_id === lastPrependedMsg.sender_id &&
+            _dateKey(firstExistingMsg.created_at) === _dateKey(lastPrependedMsg.created_at)) {
+            firstExisting.classList.add('grouped');
+        }
+        
+        // Remove duplicate date divider if it exists at the junction
+        const firstDivider = container.querySelector('.message-date-divider');
+        if (firstDivider && firstDivider.dataset.date === lastDate) {
+            firstDivider.remove();
+        }
+    }
+
+    container.insertBefore(fragment, container.firstChild);
+    
+    _pruneDOM();
+};
+
+function _pruneDOM() {
+    const container = document.getElementById('messagesContainer');
+    if (!container) return;
+
+    // Get all message bubbles (excluding date dividers)
+    const bubbles = container.querySelectorAll('.message[data-msg-id]');
+    if (bubbles.length <= DOM_MESSAGE_LIMIT) return;
+
+    const toRemove = bubbles.length - DOM_MESSAGE_LIMIT;
+    for (let i = 0; i < toRemove; i++) {
+        const bubble = bubbles[i];
+        const prev = bubble.previousElementSibling;
+        
+        bubble.remove();
+
+        // If the date divider is now orphaned, remove it
+        if (prev && prev.classList.contains('message-date-divider')) {
+            const next = prev.nextElementSibling;
+            if (!next || next.classList.contains('message-date-divider')) {
+                prev.remove();
+            }
+        }
+    }
+
+    // Also prune the app state array to save RAM
+    if (window.appState?.messages) {
+        window.appState.messages = window.appState.messages.slice(toRemove);
+    }
+}
 
 // ─────────────────────────────────────────
 // BUILD MESSAGE BUBBLE

@@ -8,15 +8,15 @@ const API_BASE = '/api';
 /**
  * Make an API request
  */
-async function api(endpoint, options = {}) {
+async function api(endpoint, options = {}, retryCount = 0) {
     const url = `${API_BASE}${endpoint}`;
+    const MAX_RETRIES = 3;
     
     const headers = {
         'Accept': 'application/json',
         ...options.headers
     };
 
-    // If body is object and not FormData, stringify it
     let body = options.body;
     if (body && !(body instanceof FormData) && typeof body === 'object') {
         body = JSON.stringify(body);
@@ -30,8 +30,7 @@ async function api(endpoint, options = {}) {
             body
         });
 
-        // Handle 401 Unauthorized globally
-        if (response.status === 401 && window.location.pathname !== '/login' && window.location.pathname !== '/' && window.location.pathname !== '/signup') {
+        if (response.status === 401 && !['/login', '/', '/signup'].includes(window.location.pathname)) {
             window.location.href = '/login';
             return null;
         }
@@ -39,11 +38,22 @@ async function api(endpoint, options = {}) {
         const data = await response.json();
         
         if (!response.ok) {
+            // Retry on server errors (5xx) or rate limits (429)
+            if ((response.status >= 500 || response.status === 429) && retryCount < MAX_RETRIES) {
+                const delay = Math.pow(2, retryCount) * 1000;
+                await new Promise(r => setTimeout(r, delay));
+                return api(endpoint, options, retryCount + 1);
+            }
             throw new Error(data.error || 'Something went wrong');
         }
         
         return data;
     } catch (error) {
+        if (retryCount < MAX_RETRIES && (error.name === 'TypeError' || error.message.includes('NetworkError'))) {
+            const delay = Math.pow(2, retryCount) * 1000;
+            await new Promise(r => setTimeout(r, delay));
+            return api(endpoint, options, retryCount + 1);
+        }
         console.error('API Error:', error);
         throw error;
     }

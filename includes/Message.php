@@ -14,13 +14,29 @@ class Message {
     /**
      * Send a new message
      */
-    public function send(int $conversationId, int $senderId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null): int {
+    public function send(int $conversationId, int $senderId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null, ?string $clientMsgId = null): int {
+        // Deduplication check
+        if ($clientMsgId) {
+            $existing = $this->findByClientMsgId($clientMsgId);
+            if ($existing) {
+                return (int) $existing['id'];
+            }
+        }
+
         $this->db->query(
-            "INSERT INTO messages (conversation_id, sender_id, content, type, reply_to_id, forwarded_from_id)
-             VALUES (?, ?, ?, ?, ?, ?)",
-            [$conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId]
+            "INSERT INTO messages (conversation_id, sender_id, content, type, reply_to_id, forwarded_from_id, client_msg_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [$conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $clientMsgId]
         );
         return (int) $this->db->lastInsertId();
+    }
+
+    /**
+     * Find a message by client_msg_id (for deduplication)
+     */
+    public function findByClientMsgId(string $clientMsgId): ?array {
+        $stmt = $this->db->query("SELECT id FROM messages WHERE client_msg_id = ?", [$clientMsgId]);
+        return $stmt->fetch() ?: null;
     }
 
     /**
@@ -105,11 +121,63 @@ class Message {
     }
 
     /**
+     * Map message array to shorthand keys for network optimization
+     */
+    public static function formatShorthand(array $msg, int $userId): array {
+        $isMine = (int)$msg['sender_id'] === $userId;
+        
+        $attachment = null;
+        if (!empty($msg['attachment_id'])) {
+            $attachment = [
+                'i'  => (int)$msg['attachment_id'],
+                'n'  => $msg['attachment_file_name'],
+                'p'  => $msg['attachment_file_path'],
+                't'  => $msg['attachment_file_type'],
+                's'  => (int)$msg['attachment_file_size'],
+                'w'  => (int)($msg['attachment_width'] ?? 0),
+                'h'  => (int)($msg['attachment_height'] ?? 0),
+                'd'  => (int)($msg['attachment_duration'] ?? 0),
+            ];
+        }
+
+        $reply = null;
+        if (!empty($msg['reply_to_id'])) {
+            $reply = [
+                'i'  => (int)$msg['reply_to_id'],
+                'c'  => $msg['reply_content'] ?? '',
+                'si' => (int)($msg['reply_sender_id'] ?? 0),
+                'sn' => $msg['reply_sender_name'] ?? '',
+                't'  => $msg['reply_type'] ?? 'text',
+            ];
+        }
+
+        return [
+            'i'  => (int)$msg['id'],
+            'ci' => (int)$msg['conversation_id'],
+            'si' => (int)$msg['sender_id'],
+            'sn' => $msg['sender_display_name'] ?? '',
+            'sa' => $msg['sender_avatar_url'] ?? '',
+            'c'  => $msg['is_deleted_for_everyone'] ? null : ($msg['content'] ?? ''),
+            't'  => $msg['type'],
+            'im' => $isMine,
+            'ie' => (bool)($msg['is_edited'] ?? false),
+            'id' => (bool)($msg['is_deleted_for_everyone'] ?? false),
+            'ff' => $msg['forwarded_from_id'] ? (int)$msg['forwarded_from_id'] : null,
+            're' => $reply,
+            'at' => $attachment,
+            'rs' => 'sent', // placeholder, updated by caller if needed
+            'ca' => $msg['created_at'],
+            'cm' => $msg['client_msg_id'] ?? null,
+        ];
+    }
+
+    /**
      * Get a single message by ID (lightweight, no attachment/reply joins)
      */
     public function findById(int $messageId): ?array {
         $stmt = $this->db->query(
-            "SELECT m.*, u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url
+            "SELECT m.id, m.conversation_id, m.sender_id, m.content, m.type, m.created_at, m.is_edited, m.is_deleted_for_everyone,
+                    u.display_name AS sender_display_name, u.avatar_url AS sender_avatar_url
              FROM messages m
              INNER JOIN users u ON u.id = m.sender_id
              WHERE m.id = ?",

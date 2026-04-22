@@ -18,7 +18,7 @@ class Chat {
     /**
      * Send a message to a user (creates conversation if needed)
      */
-    public function sendMessage(int $senderId, int $recipientId, string $content, string $type = 'text', ?int $replyToId = null): array {
+    public function sendMessage(int $senderId, int $recipientId, string $content, string $type = 'text', ?int $replyToId = null, ?string $clientMsgId = null): array {
         // Get or create conversation
         $convId = $this->conversationModel->getOrCreateDirect($senderId, $recipientId);
 
@@ -30,7 +30,7 @@ class Chat {
         }
 
         // Send message
-        $messageId = $this->messageModel->send($convId, $senderId, $content, $type, $replyToId);
+        $messageId = $this->messageModel->send($convId, $senderId, $content, $type, $replyToId, null, $clientMsgId);
 
         // Update conversation timestamp
         $this->conversationModel->touch($convId);
@@ -55,7 +55,7 @@ class Chat {
     /**
      * Send a message to an existing conversation
      */
-    public function sendToConversation(int $senderId, int $conversationId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null): array {
+    public function sendToConversation(int $senderId, int $conversationId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null, ?string $clientMsgId = null): array {
         // Verify sender is a participant
         if (!$this->conversationModel->isParticipant($conversationId, $senderId)) {
             return ['success' => false, 'error' => 'Not a participant'];
@@ -68,7 +68,7 @@ class Chat {
         }
 
         // Send message
-        $messageId = $this->messageModel->send($conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId);
+        $messageId = $this->messageModel->send($conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $clientMsgId);
 
         // Update conversation
         $this->conversationModel->touch($conversationId);

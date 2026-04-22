@@ -18,7 +18,7 @@ const Notifier = (() => {
 
     // ── State ──
     const _prevUnread = {};   // { convId: lastKnownUnreadCount }
-    let   _bgTimer    = null;
+    let   _pollTimeout = null;
     let   _permission = 'default';
     let   _started    = false;
 
@@ -174,11 +174,27 @@ const Notifier = (() => {
     // ── Background Poll ──
 
     async function _poll() {
+        clearTimeout(_pollTimeout);
         try {
             const res = await api('/chat/conversations');
             if (!res?.success) return;
-            _process(res.data.conversations);
-        } catch (_) {}
+            const conversations = (res.data.cs || []).map(_remapConv);
+            _process(conversations);
+        } catch (_) {} finally {
+            const interval = document.visibilityState === 'visible' ? 5000 : 30000;
+            _pollTimeout = setTimeout(_poll, interval);
+        }
+    }
+
+    function _remapConv(c) {
+        if (!c || c._remapped) return c;
+        return {
+            conversation_id: c.i,
+            unread_count: c.uc,
+            other_user: { display_name: c.u.n, id: c.u.i, status: c.u.s },
+            last_message: { type: c.m.ty, content: c.m.c },
+            _remapped: true
+        };
     }
 
     // ── Public API ──
@@ -197,7 +213,7 @@ const Notifier = (() => {
         // Baseline: capture current unreads WITHOUT firing notifications
         api('/chat/conversations').then(res => {
             if (!res?.success) return;
-            const convs = res.data.conversations;
+            const convs = (res.data.cs || []).map(_remapConv);
             window.appState.conversations = convs;
             for (const c of convs) {
                 _prevUnread[c.conversation_id] = c.unread_count || 0;
@@ -210,12 +226,12 @@ const Notifier = (() => {
         }).catch(() => {});
 
         // Start polling
-        _bgTimer = setInterval(_poll, 5000);
+        _poll();
     }
 
     function stop() {
-        clearInterval(_bgTimer);
-        _bgTimer = null;
+        clearTimeout(_pollTimeout);
+        _pollTimeout = null;
         _started = false;
         _updateTitle(0);
     }

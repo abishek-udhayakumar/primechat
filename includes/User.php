@@ -103,9 +103,12 @@ class User {
      * Update user online status
      */
     public function updateStatus(int $userId, string $status): void {
+        // Optimization: Only update last_seen if status changed or if it was updated more than 60s ago
         $this->db->query(
-            "UPDATE users SET status = ?, last_seen = NOW() WHERE id = ?",
-            [$status, $userId]
+            "UPDATE users
+             SET status = ?, last_seen = NOW()
+             WHERE id = ? AND (status != ? OR last_seen < DATE_SUB(NOW(), INTERVAL 60 SECOND))",
+            [$status, $userId, $status]
         );
     }
 
