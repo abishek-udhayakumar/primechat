@@ -27,6 +27,7 @@ async function api(endpoint, options = {}, retryCount = 0) {
     try {
         const response = await fetch(url, {
             ...options,
+            credentials: 'include',
             headers,
             body
         });

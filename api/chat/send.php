@@ -13,6 +13,21 @@ Response::requireMethod('POST');
 $userId = requireAuth();
 $data   = Response::getJsonBody();
 
+// ── DEBUG: Temporary production debugging ──
+$debugLog = BASE_PATH . '/logs/send_debug.log';
+@mkdir(dirname($debugLog), 0777, true);
+$debugInfo = [
+    'time'       => date('Y-m-d H:i:s'),
+    'user_id'    => $userId,
+    'session_id' => session_id(),
+    'has_csrf'   => !empty($_SERVER['HTTP_X_CSRF_TOKEN']),
+    'conv_id'    => $data['conversation_id'] ?? null,
+    'recip_id'   => $data['recipient_id'] ?? null,
+    'content_len'=> strlen($data['content'] ?? ''),
+    'type'       => $data['type'] ?? 'text',
+];
+@file_put_contents($debugLog, json_encode($debugInfo) . "\n", FILE_APPEND);
+
 $content        = Sanitizer::trimInput($data['content'] ?? '');
 $type           = in_array($data['type'] ?? 'text', ['text', 'image', 'file', 'voice']) ? ($data['type'] ?? 'text') : 'text';
 $replyToId      = isset($data['reply_to_id'])    ? (int)$data['reply_to_id']    : null;

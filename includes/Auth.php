@@ -183,11 +183,9 @@ class Auth {
 
         if (empty($_SESSION['user_id'])) return false;
 
-        // 1. IP Binding check (prevent hijacking)
-        if (($_SESSION['ip'] ?? '') !== ($_SERVER['REMOTE_ADDR'] ?? '')) {
-            $this->logout();
-            return false;
-        }
+        // Note: IP binding removed — it broke sessions when users
+        // access the app from different IPs (localhost vs LAN, mobile roaming).
+        // Absolute + inactivity expiry below provides sufficient protection.
 
         // 2. Absolute expiry (24 hours)
         if (time() - ($_SESSION['_created'] ?? 0) > 86400) {
