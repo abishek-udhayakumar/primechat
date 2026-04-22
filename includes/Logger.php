@@ -31,6 +31,22 @@ class Logger {
         self::log('error', $message, $context);
     }
 
+    /**
+     * Critical alert (suitable for triggering notifications)
+     */
+    public static function alert(string $message, array $context = []): void {
+        self::log('alert', $message, $context);
+        
+        // Write to a separate high-priority alert log
+        $alertFile = self::$logDir . '/alerts.log';
+        $entry = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'message'   => $message,
+            'context'   => $context
+        ];
+        file_put_contents($alertFile, json_encode($entry) . PHP_EOL, FILE_APPEND);
+    }
+
     public static function info(string $message, array $context = []): void {
         self::log('info', $message, $context);
     }

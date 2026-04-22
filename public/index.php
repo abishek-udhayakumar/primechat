@@ -72,8 +72,27 @@ if (isset($routes[$uri])) {
     $viewFile = BASE_PATH . $routes[$uri];
     
     if (file_exists($viewFile)) {
+        require_once BASE_PATH . '/config/app.php';
+        require_once BASE_PATH . '/config/database.php';
+        require_once BASE_PATH . '/config/session.php';
+        require_once BASE_PATH . '/includes/Sanitizer.php';
+        require_once BASE_PATH . '/includes/User.php';
+        require_once BASE_PATH . '/includes/Auth.php';
+
+        $auth = new Auth();
+        $auth->validateSession();
+        $csrfToken = $auth->getCsrfToken() ?? '';
+
         header('Content-Type: text/html; charset=UTF-8');
-        readfile($viewFile);
+        $html = file_get_contents($viewFile);
+        
+        // Inject CSRF meta tag into <head>
+        $csrfTag = "\n    <meta name=\"csrf-token\" content=\"$csrfToken\">";
+        if (preg_match('/<head[^>]*>/i', $html, $matches)) {
+            $html = str_replace($matches[0], $matches[0] . $csrfTag, $html);
+        }
+        
+        echo $html;
         exit;
     }
 }

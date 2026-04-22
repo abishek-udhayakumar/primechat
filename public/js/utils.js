@@ -14,6 +14,7 @@ async function api(endpoint, options = {}, retryCount = 0) {
     
     const headers = {
         'Accept': 'application/json',
+        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '',
         ...options.headers
     };
 

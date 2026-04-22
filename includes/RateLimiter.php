@@ -1,39 +1,57 @@
 <?php
 /**
- * PrimeChat — Simple Rate Limiter
+ * PrimeChat — Scalable Rate Limiter
  */
 
-class RateLimiter {
-    private static int $limit = 100; // requests
-    private static int $window = 60; // seconds
+interface RateLimitStoreInterface {
+    public function increment(string $key, int $window): int;
+    public function getStartTime(string $key): int;
+    public function reset(string $key, int $startTime): void;
+}
 
-    /**
-     * Check if the current request exceeds the rate limit
-     */
-    public static function check(): void {
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-
-        $key = 'rate_limit_' . ($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+class SessionRateLimitStore implements RateLimitStoreInterface {
+    public function increment(string $key, int $window): int {
+        if (session_status() === PHP_SESSION_NONE) session_start();
+        
         $now = time();
-
-        if (!isset($_SESSION[$key])) {
+        if (!isset($_SESSION[$key]) || ($now - $_SESSION[$key]['start'] > $window)) {
             $_SESSION[$key] = ['count' => 1, 'start' => $now];
-            return;
+        } else {
+            $_SESSION[$key]['count']++;
         }
+        return $_SESSION[$key]['count'];
+    }
 
-        $data = $_SESSION[$key];
+    public function getStartTime(string $key): int {
+        return $_SESSION[$key]['start'] ?? time();
+    }
 
-        if ($now - $data['start'] > self::$window) {
-            $_SESSION[$key] = ['count' => 1, 'start' => $now];
-            return;
+    public function reset(string $key, int $startTime): void {
+        $_SESSION[$key] = ['count' => 1, 'start' => $startTime];
+    }
+}
+
+class RateLimiter {
+    private static int $limit = 100; 
+    private static int $window = 60; 
+    private static ?RateLimitStoreInterface $store = null;
+
+    private static function getStore(): RateLimitStoreInterface {
+        if (self::$store === null) {
+            // Default to Session store, but easily swappable for RedisRateLimitStore
+            self::$store = new SessionRateLimitStore();
         }
+        return self::$store;
+    }
 
-        $_SESSION[$key]['count']++;
+    public static function check(): void {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        $key = 'rl_' . md5($ip);
+        
+        $count = self::getStore()->increment($key, self::$window);
 
-        if ($_SESSION[$key]['count'] > self::$limit) {
-            Logger::error('Rate limit exceeded', ['ip' => $_SERVER['REMOTE_ADDR']]);
+        if ($count > self::$limit) {
+            Logger::error('Rate limit exceeded', ['ip' => $ip]);
             Response::error('Too many requests', 429);
         }
     }

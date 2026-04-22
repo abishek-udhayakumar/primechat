@@ -158,14 +158,57 @@ class Auth {
         return $user;
     }
 
-    /**
-     * Create a session for the user
-     */
     private function createSession(int $userId, string $username): void {
         session_regenerate_id(true);
-        $_SESSION['user_id']   = $userId;
-        $_SESSION['username']  = $username;
-        $_SESSION['_created']  = time();
-        $_SESSION['ip']        = $_SERVER['REMOTE_ADDR'] ?? '';
+        $_SESSION['user_id']    = $userId;
+        $_SESSION['username']   = $username;
+        $_SESSION['_created']   = time();
+        $_SESSION['_last_act']  = time();
+        $_SESSION['ip']         = $_SERVER['REMOTE_ADDR'] ?? '';
+        
+        // Ensure token exists, but don't regenerate it if it's already there
+        // to avoid desyncing with the frontend meta tag.
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+    }
+
+    /**
+     * Verify session integrity and expiry
+     */
+    public function validateSession(): bool {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        if (empty($_SESSION['user_id'])) return false;
+
+        // 1. IP Binding check (prevent hijacking)
+        if (($_SESSION['ip'] ?? '') !== ($_SERVER['REMOTE_ADDR'] ?? '')) {
+            $this->logout();
+            return false;
+        }
+
+        // 2. Absolute expiry (24 hours)
+        if (time() - ($_SESSION['_created'] ?? 0) > 86400) {
+            $this->logout();
+            return false;
+        }
+
+        // 3. Inactivity expiry (2 hours)
+        if (time() - ($_SESSION['_last_act'] ?? 0) > 7200) {
+            $this->logout();
+            return false;
+        }
+
+        $_SESSION['_last_act'] = time();
+        return true;
+    }
+
+    /**
+     * Get CSRF token for the current session
+     */
+    public function getCsrfToken(): ?string {
+        return $_SESSION['csrf_token'] ?? null;
     }
 }

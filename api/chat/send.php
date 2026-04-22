@@ -32,7 +32,8 @@ if ($conversationId) {
     if (!$convModel->isParticipant($conversationId, $userId)) {
         Response::error('Access denied', 403);
     }
-    $result = $chat->sendToConversation($userId, $conversationId, $content, $type, $replyToId, $clientMsgId);
+    // Pass null for forwardedFromId (6th arg) so clientMsgId is correctly mapped to 7th arg
+    $result = $chat->sendToConversation($userId, $conversationId, $content, $type, $replyToId, null, $clientMsgId);
 } elseif ($recipientId) {
     if ($recipientId === $userId) {
         Response::error('Cannot send message to yourself', 422);

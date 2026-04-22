@@ -46,7 +46,7 @@ class Response {
 
         // Log API errors (non-4xx usually indicate server issues or critical failures)
         if ($code >= 500) {
-            Logger::error("API Error $code: $message", ['errors' => $errors]);
+            Logger::alert("API Critical Error $code: $message", ['errors' => $errors]);
         }
 
         echo json_encode($response, JSON_UNESCAPED_UNICODE);

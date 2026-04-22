@@ -3,14 +3,26 @@
  * PrimeChat — Bootstrap / Common loader
  * All API endpoints include this file
  */
+require_once __DIR__ . '/../vendor/autoload.php';
+
+// Load .env only if exists (local development / CLI)
+if (file_exists(__DIR__ . '/../.env')) {
+    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+    $dotenv->load();
+}
+
+if (!defined('BASE_PATH')) {
+    define('BASE_PATH', dirname(__DIR__));
+}
+
+// Load core utilities
+require_once __DIR__ . '/../config/app.php';
+require_once __DIR__ . '/../config/session.php';
+require_once __DIR__ . '/../includes/Logger.php';
+require_once __DIR__ . '/../includes/Response.php';
 
 ini_set('log_errors', '1');
 define('APP_START_TIME', microtime(true));
-
-// Load core utilities first
-require_once __DIR__ . '/../config/app.php';
-require_once __DIR__ . '/../includes/Logger.php';
-require_once __DIR__ . '/../includes/Response.php';
 
 // Global error/exception handlers
 set_exception_handler(function ($e) {
@@ -44,7 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // Load configuration
 require_once __DIR__ . '/../config/database.php';
-require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../includes/RateLimiter.php';
 
 // Apply rate limiting
@@ -54,6 +65,37 @@ RateLimiter::check();
 require_once __DIR__ . '/../includes/Sanitizer.php';
 require_once __DIR__ . '/../includes/User.php';
 require_once __DIR__ . '/../includes/Auth.php';
+
+// Initialize Auth & Validate Session
+$auth = new Auth();
+$isAuthed = $auth->validateSession();
+
+// CSRF Protection for state-changing requests
+$requestUri = $_SERVER['REQUEST_URI'] ?? '';
+$isHealthCheck = str_contains($requestUri, '/api/health');
+$isAuthAction  = str_contains($requestUri, '/api/auth/');
+
+if (!$isHealthCheck && $_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
+    $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    $sessionToken = $auth->getCsrfToken();
+    $csrfValid = !empty($token) && $token === $sessionToken;
+
+    if (!$csrfValid) {
+        Logger::error('CSRF token mismatch debug', [
+            'received' => $token,
+            'session'  => $sessionToken,
+            'method'   => $_SERVER['REQUEST_METHOD'],
+            'uri'      => $_SERVER['REQUEST_URI']
+        ]);
+        Response::error('CSRF token mismatch', 403);
+    }
+
+    // If CSRF is valid but not authed, only allow auth actions
+    if (!$isAuthed && !$isAuthAction) {
+        Response::error('Authentication required', 401);
+    }
+}
+
 require_once __DIR__ . '/../includes/Conversation.php';
 require_once __DIR__ . '/../includes/Message.php';
 require_once __DIR__ . '/../includes/Chat.php';
