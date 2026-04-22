@@ -39,48 +39,56 @@ if (empty($content) && $type === 'text') {
     Response::error('Message content is required', 422);
 }
 
-// ── Resolve conversation ──
-$chat        = new Chat();
-$convModel   = new Conversation();
+try {
+    // ── Resolve conversation ──
+    $chat        = new Chat();
+    $convModel   = new Conversation();
 
-if ($conversationId) {
-    if (!$convModel->isParticipant($conversationId, $userId)) {
-        Response::error('Access denied', 403);
+    if ($conversationId) {
+        if (!$convModel->isParticipant($conversationId, $userId)) {
+            Response::error('Access denied', 403);
+        }
+        $result = $chat->sendToConversation($userId, $conversationId, $content, $type, $replyToId, null, $clientMsgId);
+    } elseif ($recipientId) {
+        if ($recipientId === $userId) {
+            Response::error('Cannot send message to yourself', 422);
+        }
+        $result = $chat->sendMessage($userId, $recipientId, $content, $type, $replyToId, $clientMsgId);
+    } else {
+        Response::error('Either conversation_id or recipient_id is required', 422);
     }
-    // Pass null for forwardedFromId (6th arg) so clientMsgId is correctly mapped to 7th arg
-    $result = $chat->sendToConversation($userId, $conversationId, $content, $type, $replyToId, null, $clientMsgId);
-} elseif ($recipientId) {
-    if ($recipientId === $userId) {
-        Response::error('Cannot send message to yourself', 422);
+
+    if (!$result['success']) {
+        Response::error($result['error'] ?? 'Failed to send message');
     }
-    $result = $chat->sendMessage($userId, $recipientId, $content, $type, $replyToId, $clientMsgId);
-} else {
-    Response::error('Either conversation_id or recipient_id is required', 422);
-}
 
-if (!$result['success']) {
-    Response::error($result['error'] ?? 'Failed to send message');
-}
+    $conversationId = $result['conversation_id'];
+    $messageId      = $result['message_id'];
 
-$conversationId = $result['conversation_id'];
-$messageId      = $result['message_id'];
+    // ── Fetch full message (with attachment + reply JOINs) ──
+    $msgModel       = new Message();
+    $msg            = $msgModel->findByIdFull($messageId);
+    $otherLastRead  = $msgModel->getReadStatusBatch($conversationId, $userId);
 
-// ── Fetch full message (with attachment + reply JOINs) ──
-$msgModel       = new Message();
-$msg            = $msgModel->findByIdFull($messageId);
-$otherLastRead  = $msgModel->getReadStatusBatch($conversationId, $userId);
+    $formattedMessage = null;
 
-$formattedMessage = null;
-
-if ($msg) {
-    $formattedMessage = Message::formatShorthand($msg, $userId);
-    if ($formattedMessage['im']) {
-        $formattedMessage['rs'] = ($otherLastRead !== null && $otherLastRead >= $formattedMessage['i'] ? 'read' : 'delivered');
+    if ($msg) {
+        $formattedMessage = Message::formatShorthand($msg, $userId);
+        if ($formattedMessage['im']) {
+            $formattedMessage['rs'] = ($otherLastRead !== null && $otherLastRead >= $formattedMessage['i'] ? 'read' : 'delivered');
+        }
     }
-}
 
-Response::success([
-    'message_id'      => $messageId,
-    'conversation_id' => $conversationId,
-    'message'         => $formattedMessage,
-], 'Message sent');
+    Response::success([
+        'message_id'      => $messageId,
+        'conversation_id' => $conversationId,
+        'message'         => $formattedMessage,
+    ], 'Message sent');
+
+} catch (\Throwable $e) {
+    // ── DEBUG: Return real error for production diagnosis ──
+    @file_put_contents(BASE_PATH . '/logs/send_error.log',
+        date('Y-m-d H:i:s') . " | " . $e->getMessage() . " | " . $e->getFile() . ":" . $e->getLine() . "\n",
+        FILE_APPEND);
+    Response::error('SEND_DEBUG: ' . $e->getMessage() . ' at ' . basename($e->getFile()) . ':' . $e->getLine(), 500);
+}
