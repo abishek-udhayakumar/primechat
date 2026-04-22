@@ -6,7 +6,13 @@
 // App identity
 define('APP_NAME', 'PrimeChat');
 define('APP_VERSION', '1.0.0');
-define('APP_URL', 'http://primechat.me');
+if (!isset($_ENV['APP_URL'])) {
+    error_log("CRITICAL ERROR: Missing required environment variable: APP_URL");
+    http_response_code(500);
+    exit(json_encode(['success' => false, 'error' => 'Server Configuration Error']));
+}
+
+define('APP_URL', rtrim($_ENV['APP_URL'], '/'));
 
 // Paths
 define('ROOT_PATH', dirname(__DIR__));

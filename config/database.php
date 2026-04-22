@@ -4,12 +4,24 @@
  * PDO Singleton with connection pooling support
  */
 
-define('DB_HOST', 'localhost');
-define('DB_PORT', '3306');
-define('DB_USER', 'root');
-define('DB_PASS', 'hacker@#007');
-define('DB_NAME', 'primechat');
-define('DB_CHARSET', 'utf8mb4');
+// Validate required environment variables (fail fast)
+$requiredVars = ['DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASS', 'DB_NAME', 'DB_CHARSET'];
+foreach ($requiredVars as $var) {
+    if (!isset($_ENV[$var])) {
+        // Log the error securely (don't output to user)
+        error_log("CRITICAL ERROR: Missing required environment variable: {$var}");
+        http_response_code(500);
+        exit(json_encode(['success' => false, 'error' => 'Server Configuration Error']));
+    }
+}
+
+// Define constants from environment
+define('DB_HOST', $_ENV['DB_HOST']);
+define('DB_PORT', $_ENV['DB_PORT']);
+define('DB_USER', $_ENV['DB_USER']);
+define('DB_PASS', $_ENV['DB_PASS']);
+define('DB_NAME', $_ENV['DB_NAME']);
+define('DB_CHARSET', $_ENV['DB_CHARSET']);
 
 class Database {
     private static ?Database $instance = null;

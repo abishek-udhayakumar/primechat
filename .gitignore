@@ -1,0 +1,25 @@
+# Environment
+.env
+
+# Composer
+/vendor/
+
+# Node (if used)
+/node_modules/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Uploads (user data)
+/public/uploads/
+
+# IDE files
+.vscode/
+.idea/
+
+# Cache / temp
+/tmp/
