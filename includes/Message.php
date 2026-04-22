@@ -79,6 +79,7 @@ class Message {
                 m.forwarded_from_id,
                 m.is_edited,
                 m.is_deleted_for_everyone,
+                m.client_msg_id,
                 m.created_at,
                 m.updated_at,
                 -- Sender info
@@ -197,7 +198,7 @@ class Message {
             "SELECT
                 m.id, m.conversation_id, m.sender_id, m.content, m.type,
                 m.reply_to_id, m.forwarded_from_id, m.is_edited,
-                m.is_deleted_for_everyone, m.created_at, m.updated_at,
+                m.is_deleted_for_everyone, m.client_msg_id, m.created_at, m.updated_at,
                 u.username AS sender_username,
                 u.display_name AS sender_display_name,
                 u.avatar_url AS sender_avatar_url,
