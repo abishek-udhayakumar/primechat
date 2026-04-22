@@ -12,6 +12,7 @@ require_once __DIR__ . '/../bootstrap.php';
 Response::requireMethod('GET');
 
 $userId = requireAuth();
+session_write_close(); // Release session lock early
 
 $conversationId = (int) ($_GET['conversation_id'] ?? 0);
 $afterId = isset($_GET['after_id']) ? (int) $_GET['after_id'] : null;

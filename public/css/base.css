@@ -25,6 +25,10 @@ body {
     background: var(--color-bg-primary);
     overflow: hidden;
     height: 100dvh;
+    /* Mobile: prevent pull-to-refresh, bounce, and scroll jump */
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
 }
 
 /* ── Scrollbar ── */

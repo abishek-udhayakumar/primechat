@@ -8,6 +8,7 @@ require_once __DIR__ . '/../bootstrap.php';
 Response::requireMethod('GET');
 
 $userId = requireAuth();
+session_write_close(); // Release session lock early
 
 // Update user online status (heartbeat)
 (new User())->updateStatus($userId, 'online');

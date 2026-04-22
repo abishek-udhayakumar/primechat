@@ -94,7 +94,7 @@ async function _loadInitialMessages() {
         window.appState.lastMessageId = _lastId(window.appState.messages);
         _hasMoreHistory = res.data.hm;
 
-        renderMessages();
+        window.renderMessages(window.appState.messages);
         scrollToBottom(false);
         _markLastRead();
     } catch (e) {
@@ -126,7 +126,7 @@ async function _loadOlderMessages() {
                 if (typeof window._prependMessages === 'function') {
                     window._prependMessages(oldMsgs);
                 } else {
-                    renderMessages(); // fallback
+                    window.renderMessages(window.appState.messages); // fallback
                 }
 
                 // Immediate scroll restoration
@@ -269,7 +269,7 @@ async function _poll() {
                 window.appState.lastMessageId = _lastId(window.appState.messages);
 
                 // Append new DOM nodes instead of full re-render
-                _appendMessages(newMsgs);
+                window._appendMessages(newMsgs);
 
                 if (wasAtBottom) {
                     scrollToBottom(true);
@@ -343,7 +343,7 @@ async function sendMessage(content = null, type = 'text') {
     cancelReply();
 
     window.appState.messages.push(tempMsg);
-    _appendMessages([tempMsg]);
+    window._appendMessages([tempMsg]);
     scrollToBottom(true);
 
     _isSending = true;
@@ -696,3 +696,20 @@ document.addEventListener('visibilitychange', () => {
         _poll(); // immediate catch-up when tab becomes visible
     }
 });
+
+// ─────────────────────────────────────────
+// MOBILE KEYBOARD HANDLING (VisualViewport)
+// ─────────────────────────────────────────
+if (window.visualViewport) {
+    let _vpTimeout = null;
+    window.visualViewport.addEventListener('resize', () => {
+        clearTimeout(_vpTimeout);
+        _vpTimeout = setTimeout(() => {
+            const vh = window.visualViewport.height;
+            const app = document.querySelector('.chat-app');
+            if (app) app.style.height = vh + 'px';
+            // Keep chat scrolled to bottom when keyboard opens
+            if (_isAtBottom()) scrollToBottom(false);
+        }, 50);
+    });
+}

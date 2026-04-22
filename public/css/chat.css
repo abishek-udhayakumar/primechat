@@ -552,6 +552,11 @@
     background: var(--wallpaper-default);
     scroll-behavior: smooth;
     position: relative;
+    /* Mobile scroll performance */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    will-change: scroll-position;
+    contain: layout style;
 }
 
 /* ── Scroll to Bottom Button ── */
@@ -827,22 +832,124 @@
 /* ══════════════════════════════════════════
    MOBILE RESPONSIVE
 ══════════════════════════════════════════ */
-@media (max-width: 768px) {
-    :root { --sidebar-width: 100vw; }
 
-    .sidebar { position: absolute; inset: 0; z-index: var(--z-modal); }
-    .sidebar.hidden-mobile { transform: translateX(-100%); }
-
-    .chat-header-back { display: flex; }
-
-    .messages-container { padding: var(--space-3) var(--space-3); }
-
-    .user-info-panel { width: 100%; min-width: 100%; }
+/* ── Mobile safe area support ── */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .chat-input-area {
+        padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+    }
+    .sidebar {
+        padding-top: env(safe-area-inset-top);
+    }
 }
 
+/* ── Tablet & below (768px) ── */
+@media (max-width: 768px) {
+    :root {
+        --sidebar-width: 100vw;
+        --header-height: 56px;
+        --input-height: 56px;
+    }
+
+    /* Sidebar: full-screen drawer */
+    .sidebar {
+        position: fixed;
+        inset: 0;
+        z-index: var(--z-modal);
+        width: 100vw;
+        min-width: 100vw;
+        transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .sidebar.hidden-mobile {
+        transform: translateX(-100%);
+        pointer-events: none;
+    }
+
+    /* Show back arrow in chat header */
+    .chat-header-back { display: flex; }
+
+    /* Messages container: tighter padding on mobile */
+    .messages-container {
+        padding: var(--space-3) var(--space-3);
+    }
+
+    /* User info panel: full-screen on mobile */
+    .user-info-panel { width: 100%; min-width: 100%; }
+
+    /* Touch-friendly buttons: minimum 44px */
+    .btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    .send-btn, .voice-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    /* Conversation items: larger touch targets */
+    .conversation-item {
+        padding: var(--space-3);
+        min-height: 68px;
+    }
+
+    /* Input area: ensure it's above keyboard */
+    .chat-input-area {
+        position: sticky;
+        bottom: 0;
+        z-index: var(--z-sticky);
+    }
+
+    /* Scroll-to-bottom button: adjust for mobile */
+    .scroll-bottom-btn {
+        right: var(--space-3);
+        bottom: calc(var(--input-height) + var(--space-3));
+    }
+
+    /* Chat header: compact for mobile */
+    .chat-header {
+        padding: 0 var(--space-3);
+    }
+
+    /* Sidebar header: compact */
+    .sidebar-header {
+        padding: 0 var(--space-3);
+    }
+
+    /* Profile panel body: less padding on mobile */
+    .profile-panel-body {
+        padding: var(--space-5) var(--space-4);
+    }
+}
+
+/* ── Small phones (480px) ── */
 @media (max-width: 480px) {
+    :root {
+        --header-height: 52px;
+    }
+
+    /* Hide non-essential action buttons */
     .chat-header-actions .btn:not(:last-child) { display: none; }
     .sidebar-header-actions .btn:not(:last-child) { display: none; }
+
+    /* Tighter message padding */
+    .messages-container {
+        padding: var(--space-2) var(--space-2);
+    }
+
+    /* Search bar: less padding */
+    .search-container {
+        padding: var(--space-2) var(--space-3);
+    }
+
+    /* Chat empty: smaller text */
+    .chat-empty h2 { font-size: var(--fs-lg); }
+    .chat-empty p { font-size: var(--fs-sm); }
+    .chat-empty-icon {
+        width: 72px; height: 72px;
+    }
+    .chat-empty-icon svg {
+        width: 32px; height: 32px;
+    }
 }
 
 /* ── Profile Inline Edit ── */
