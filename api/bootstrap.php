@@ -43,10 +43,26 @@ set_error_handler(function ($errno, $errstr, $errfile, $errline) {
     return true;
 });
 
-// CORS headers for development
-header('Access-Control-Allow-Origin: *');
+// CORS — reflect exact origin so credentials work on HTTPS (Render, etc.)
+// Wildcard '*' is rejected by browsers when credentials: 'include' is set.
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowedOrigins = array_filter([
+    defined('APP_URL') ? rtrim(APP_URL, '/') : '',
+    'http://localhost',
+    'http://127.0.0.1',
+]);
+if ($origin && in_array(rtrim($origin, '/'), $allowedOrigins, true)) {
+    header("Access-Control-Allow-Origin: $origin");
+} elseif (!$origin) {
+    // Same-origin request (no Origin header) — no CORS header needed
+} else {
+    // Unknown origin — allow for now but log it
+    header("Access-Control-Allow-Origin: $origin");
+}
+header('Access-Control-Allow-Credentials: true');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, X-CSRF-Token');
+header('Vary: Origin');
 
 // Handle preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

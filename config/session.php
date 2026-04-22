@@ -6,14 +6,20 @@
 
 // Only start session if not already active
 if (session_status() === PHP_SESSION_NONE) {
+    // Auto-detect HTTPS (including behind reverse proxy like Render, Nginx)
+    $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+        || (!empty($_SERVER['HTTP_X_FORWARDED_SSL']) && $_SERVER['HTTP_X_FORWARDED_SSL'] === 'on')
+        || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443);
+
     // Session cookie parameters
     session_set_cookie_params([
         'lifetime' => SESSION_LIFETIME ?? 604800,
         'path'     => '/',
         'domain'   => '',
-        'secure'   => false,  // Set to true in production with HTTPS
+        'secure'   => $isHttps,
         'httponly'  => true,
-        'samesite' => 'Lax',
+        'samesite' => $isHttps ? 'None' : 'Lax',
     ]);
 
     session_name('PRIMECHAT_SESSION');
