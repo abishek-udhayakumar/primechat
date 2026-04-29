@@ -60,7 +60,12 @@ class Conversation {
     /**
      * Get all conversations for a user with last message and other participant info
      */
-    public function getListForUser(int $userId): array {
+    public function getListForUser(int $userId, int $limit = 20, int $offset = 0): array {
+        // LIMIT/OFFSET are cast to int above — safe to interpolate directly
+        // (PDO does not support bound params for LIMIT/OFFSET in all drivers)
+        $limit  = max(1, min($limit,  100));
+        $offset = max(0, $offset);
+
         $stmt = $this->db->query(
             "SELECT
                 c.id AS conversation_id,
@@ -107,7 +112,8 @@ class Conversation {
                 SELECT 1 FROM message_deletions md
                 WHERE md.message_id = last_msg.id AND md.user_id = ?
              )
-             ORDER BY last_msg.created_at DESC",
+             ORDER BY last_msg.created_at DESC
+             LIMIT {$limit} OFFSET {$offset}",
             [$userId, $userId, $userId]
         );
 

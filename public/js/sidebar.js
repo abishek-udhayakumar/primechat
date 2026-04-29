@@ -5,28 +5,143 @@
 
 'use strict';
 
+const CONV_PAGE_SIZE = 20;
+let _convOffset  = 0;
+let _convHasMore = true;
+let _convLoading = false;
+let _convObserver = null; // IntersectionObserver for infinite scroll
+
 window.initSidebar = () => {
-    loadConversations();
+    _loadConversationPage(true); // initial load
     _bindSearch();
 
     document.getElementById('newChatBtn')?.addEventListener('click', () => {
         document.getElementById('searchInput')?.focus();
     });
 
-    // Sidebar is kept fresh by the notification engine (notifications.js)
-    // which polls /chat/conversations every 5s and calls renderConversations()
+    // Sidebar kept fresh by notifications.js polling
 };
 
-async function loadConversations() {
+// Called by notifications.js polling (full refresh of visible conversations)
+window.loadConversations = async function loadConversations() {
     try {
-        const res = await api('/chat/conversations');
+        const res = await api(`/chat/conversations?limit=${CONV_PAGE_SIZE}&offset=0`);
         if (res?.success) {
-            window.appState.conversations = res.data.conversations;
+            window.appState.conversations = _remapConversations(res.data.conversations);
+            _convOffset  = window.appState.conversations.length;
+            _convHasMore = res.data.has_more ?? false;
             renderConversations();
+            _setupInfiniteScroll();
         }
     } catch (e) {
         console.error('[PrimeChat] loadConversations failed', e);
     }
+};
+
+// Load the next page (called by IntersectionObserver or scroll)
+async function _loadConversationPage(reset = false) {
+    if (_convLoading) return;
+    if (!reset && !_convHasMore) return;
+
+    _convLoading = true;
+
+    if (reset) {
+        _convOffset  = 0;
+        _convHasMore = true;
+    }
+
+    try {
+        const res = await api(`/chat/conversations?limit=${CONV_PAGE_SIZE}&offset=${_convOffset}`);
+        if (!res?.success) return;
+
+        const newConvs = _remapConversations(res.data.conversations || []);
+        _convHasMore   = res.data.has_more ?? false;
+
+        if (reset) {
+            window.appState.conversations = newConvs;
+        } else {
+            // Append, deduplicating by id
+            const existingIds = new Set(window.appState.conversations.map(c => c.conversation_id));
+            newConvs.forEach(c => {
+                if (!existingIds.has(c.conversation_id)) {
+                    window.appState.conversations.push(c);
+                }
+            });
+        }
+
+        _convOffset = window.appState.conversations.length;
+        renderConversations();
+        _setupInfiniteScroll(); // re-attach sentinel
+    } catch (e) {
+        console.error('[PrimeChat] Conversation page load failed', e);
+    } finally {
+        _convLoading = false;
+    }
+}
+
+// Remap shorthand API response to full object
+function _remapConversations(list) {
+    return (list || []).map(conv => {
+        // Support both shorthand and full format
+        if (conv.other_user) return conv; // already full
+        return {
+            conversation_id : conv.i,
+            type            : conv.t,
+            unread_count    : conv.uc ?? 0,
+            other_user      : {
+                id           : conv.u?.i,
+                username     : conv.u?.u,
+                display_name : conv.u?.n,
+                avatar_url   : conv.u?.a,
+                status       : conv.u?.s,
+                about        : conv.u?.ab,
+            },
+            last_message    : conv.m ? {
+                content  : conv.m.c,
+                time     : conv.m.tm,
+                is_mine  : conv.m.im,
+                type     : conv.m.ty,
+            } : null,
+        };
+    });
+}
+
+// Attach IntersectionObserver sentinel to load next page
+function _setupInfiniteScroll() {
+    const list = document.getElementById('conversationList');
+    if (!list) return;
+
+    // Disconnect old observer
+    if (_convObserver) { _convObserver.disconnect(); _convObserver = null; }
+
+    if (!_convHasMore) {
+        // Remove any existing sentinel
+        list.querySelector('.conv-load-sentinel')?.remove();
+        return;
+    }
+
+    let sentinel = list.querySelector('.conv-load-sentinel');
+    if (!sentinel) {
+        sentinel = document.createElement('div');
+        sentinel.className = 'conv-load-sentinel';
+        sentinel.style.cssText = 'height:1px;width:100%;';
+        list.appendChild(sentinel);
+    }
+
+    if (!('IntersectionObserver' in window)) {
+        // Fallback: load on scroll
+        list.addEventListener('scroll', () => {
+            if (list.scrollTop + list.clientHeight >= list.scrollHeight - 40) {
+                _loadConversationPage();
+            }
+        }, { passive: true });
+        return;
+    }
+
+    _convObserver = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) _loadConversationPage();
+    }, { root: list, threshold: 0.1 });
+    _convObserver.observe(sentinel);
 }
 
 function renderConversations() {

@@ -56,8 +56,15 @@ window.openConversation = async (conversationId, otherUser) => {
     _updateHeader(otherUser);
 
     // Loading spinner
+    // Skeleton instead of spinner — layout looks populated immediately
     document.getElementById('messagesContainer').innerHTML =
-        '<div class="msg-loading"><div class="spinner spinner--lg"></div></div>';
+        `<div class="msg-skeleton">
+            <div class="msg-skel-bubble msg-skel-bubble--recv" style="width:60%"></div>
+            <div class="msg-skel-bubble msg-skel-bubble--sent" style="width:45%"></div>
+            <div class="msg-skel-bubble msg-skel-bubble--recv" style="width:70%"></div>
+            <div class="msg-skel-bubble msg-skel-bubble--sent" style="width:50%"></div>
+            <div class="msg-skel-bubble msg-skel-bubble--recv" style="width:55%"></div>
+         </div>`;
 
     // Highlight active conversation in sidebar
     renderConversations();

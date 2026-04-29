@@ -1,20 +1,29 @@
 <?php
 /**
- * GET /api/chat/conversations.php
- * List all conversations for the current user
- * Sorted by latest message, includes unread counts
+ * GET /api/chat/conversations
+ * Returns paginated conversation list for the current user.
+ *
+ * Query params:
+ *   limit  (int, default 20, max 50)
+ *   offset (int, default 0)
  */
 require_once __DIR__ . '/../bootstrap.php';
 Response::requireMethod('GET');
 
 $userId = requireAuth();
-session_write_close(); // Release session lock early
+session_write_close();
 
 // Update user online status (heartbeat)
 (new User())->updateStatus($userId, 'online');
 
-$convModel = new Conversation();
-$conversations = $convModel->getListForUser($userId);
+$limit  = min((int) ($_GET['limit']  ?? 20), 50);
+$offset = max((int) ($_GET['offset'] ?? 0),  0);
+
+$convModel     = new Conversation();
+$conversations = $convModel->getListForUser($userId, $limit + 1, $offset); // +1 to detect has_more
+
+$hasMore = count($conversations) > $limit;
+if ($hasMore) array_pop($conversations); // trim the +1 sentinel row
 
 // Format conversation data for frontend
 $formatted = [];
@@ -31,9 +40,9 @@ foreach ($conversations as $conv) {
     }
 
     $formatted[] = [
-        'i'  => $conv['conversation_id'], // id
-        't'  => $conv['type'],            // type
-        'u'  => [                         // user
+        'i'  => $conv['conversation_id'],
+        't'  => $conv['type'],
+        'u'  => [
             'i'  => $conv['other_user_id'],
             'u'  => $conv['other_username'],
             'n'  => $conv['other_display_name'],
@@ -41,7 +50,7 @@ foreach ($conversations as $conv) {
             's'  => $conv['other_status'],
             'l'  => $conv['other_last_seen'],
         ],
-        'm'  => [                         // message
+        'm'  => [
             'i'  => $conv['last_message_id'],
             'c'  => $lastMessagePreview,
             'ty' => $conv['last_message_type'],
@@ -49,8 +58,12 @@ foreach ($conversations as $conv) {
             'im' => (int)$conv['last_message_sender_id'] === $userId,
             'tm' => $conv['last_message_time'],
         ],
-        'uc' => (int) $conv['unread_count'], // unread_count
+        'uc' => (int) $conv['unread_count'],
     ];
 }
 
-Response::success(['cs' => $formatted]);
+Response::success([
+    'conversations' => $formatted, // JS expects this key
+    'has_more'      => $hasMore,
+    'offset'        => $offset + count($formatted),
+]);

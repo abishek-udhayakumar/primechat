@@ -293,10 +293,22 @@ function _buildContent(bubble, msg) {
         const wrap = document.createElement('div');
         wrap.className = 'message-image';
         const img = document.createElement('img');
-        img.src     = '/' + msg.attachment.file_path;
+        const src = '/' + msg.attachment.file_path;
         img.alt     = 'Image';
         img.loading = 'lazy';
-        img.decoding = 'async'; // off main thread decode
+        img.decoding = 'async';
+
+        // Use IntersectionObserver when available (set by app.js)
+        if (window._imgObserver) {
+            img.dataset.lazySrc = src;
+            img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"%3E%3C/svg%3E'; // tiny placeholder
+            img.style.minHeight = '80px';
+            img.style.background = 'var(--color-surface)';
+            window._imgObserver.observe(img);
+        } else {
+            img.src = src; // fallback
+        }
+
         wrap.appendChild(img);
         bubble.appendChild(wrap);
         if (msg.content) bubble.appendChild(_el('div', 'message-text', escapeHTML(msg.content)));

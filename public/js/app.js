@@ -53,45 +53,92 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function initApp() {
-    // Initialize UI components
+    // Initialize UI with user data
     document.getElementById('currentUserName').textContent = window.appState.user.display_name;
     document.getElementById('currentUserAvatar').innerHTML = createAvatar(window.appState.user);
-    
-    // Initialize specific modules
-    if (window.initSidebar) window.initSidebar();
-    if (window.initChat) window.initChat();
+
+    // Critical modules (already deferred in HTML)
+    if (window.initSidebar)  window.initSidebar();
+    if (window.initChat)     window.initChat();
     if (window.initMessages) window.initMessages();
-    if (window.initProfile) window.initProfile();
-    
-    // Global Event Listeners
+
+    // Logout
     document.getElementById('logoutBtn')?.addEventListener('click', async () => {
-        try {
-            await api('/auth/logout', { method: 'POST' });
-        } catch (e) {
-            console.error(e);
-        }
+        try { await api('/auth/logout', { method: 'POST' }); } catch (_) {}
         localStorage.removeItem('user');
         localStorage.removeItem('csrf_token');
         window.location.href = '/login';
     });
+
+    // ── LAZY MODULE: Theme — load on first toggle click ──
+    const _initTheme = async () => {
+        await _loadModule('/js/theme.js');
+        if (window.initTheme) window.initTheme();
+    };
+    // Apply saved theme immediately without JS (CSS data-theme handles it)
+    // Only load full theme.js when user wants to change it
+    document.getElementById('themeToggleBtn')?.addEventListener('click', async () => {
+        await _initTheme();
+        document.getElementById('themeToggleBtn')?.click(); // re-fire to actual handler
+    }, { once: true });
+    document.getElementById('profileThemeToggle')?.addEventListener('click', async () => {
+        await _initTheme();
+    }, { once: true });
+
+    // ── LAZY MODULE: Emoji picker ──
+    document.getElementById('emojiBtn')?.addEventListener('click', async () => {
+        await _loadModule('/js/emoji.js');
+        if (window.initEmoji) window.initEmoji();
+        document.getElementById('emojiBtn')?.click(); // re-fire so the picker opens
+    }, { once: true });
+
+    // ── LAZY MODULE: Upload (file attach + drag-drop) ──
+    document.getElementById('attachBtn')?.addEventListener('click', async () => {
+        await _loadModule('/js/upload.js');
+        if (window.initUpload) window.initUpload();
+        document.getElementById('attachBtn')?.click(); // re-fire
+    }, { once: true });
+    // Also lazy-load on drag-over the entire app
+    document.querySelector('.chat-app')?.addEventListener('dragover', async () => {
+        await _loadModule('/js/upload.js');
+        if (window.initUpload) window.initUpload();
+    }, { once: true, passive: true });
+
+    // ── LAZY MODULE: Voice recording ──
+    document.getElementById('voiceBtn')?.addEventListener('click', async () => {
+        await _loadModule('/js/voice.js');
+        if (window.initVoice) window.initVoice();
+        document.getElementById('voiceBtn')?.click(); // re-fire
+    }, { once: true });
+
+    // ── LAZY MODULE: Profile panel ──
+    document.getElementById('sidebarProfileTrigger')?.addEventListener('click', async () => {
+        await _loadModule('/js/profile.js');
+        if (window.initProfile) window.initProfile();
+        document.getElementById('sidebarProfileTrigger')?.click(); // re-fire
+    }, { once: true });
+
+    // ── Image lazy loading via IntersectionObserver ──
+    // Observes images in the messages container and sets src only when visible
+    if ('IntersectionObserver' in window) {
+        const _imgObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (!entry.isIntersecting) return;
+                const img = entry.target;
+                if (img.dataset.lazySrc) {
+                    img.src = img.dataset.lazySrc;
+                    img.removeAttribute('data-lazy-src');
+                }
+                _imgObserver.unobserve(img);
+            });
+        }, { rootMargin: '200px 0px', threshold: 0 });
+
+        // Expose globally so messages.js can use it
+        window._imgObserver = _imgObserver;
+    }
 }
 
 function applyThemeAndWallpaper(user) {
-    // Theme
-    const theme = user.theme || 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
-    
-    // Wallpaper
-    const wallpaper = user.wallpaper || 'default';
-    const messagesContainer = document.getElementById('messagesContainer');
-    const chatEmpty = document.getElementById('chatEmpty');
-    
-    if (messagesContainer) {
-        // Reset classes
-        messagesContainer.className = 'messages-container';
-        if (wallpaper.startsWith('solid') || wallpaper.startsWith('gradient')) {
-            // Handled via inline style or CSS classes based on variables
-            // For simplicity, we just add the class
-        }
-    }
+    document.documentElement.setAttribute('data-theme', user.theme || 'dark');
+    window.appState.wallpaper = user.wallpaper || 'default';
 }

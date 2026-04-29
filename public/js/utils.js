@@ -177,3 +177,29 @@ function escapeHTML(str) {
     div.innerText = str;
     return div.innerHTML;
 }
+
+/**
+ * On-demand module loader — injects a <script> tag once per src.
+ * Returns a Promise that resolves when the script is ready.
+ * Heavy modules (emoji, voice, upload, profile, theme) use this
+ * so they don't block the initial page parse.
+ *
+ * Usage: await _loadModule('/js/emoji.js')
+ */
+const _moduleCache = {};
+function _loadModule(src) {
+    if (_moduleCache[src]) return _moduleCache[src];
+    _moduleCache[src] = new Promise((resolve, reject) => {
+        // Already in DOM (e.g. during HMR / dev)
+        if (document.querySelector(`script[src="${src}"]`)) {
+            resolve(); return;
+        }
+        const s = document.createElement('script');
+        s.src = src;
+        s.defer = true;
+        s.onload  = () => resolve();
+        s.onerror = () => { delete _moduleCache[src]; reject(new Error(`Failed to load ${src}`)); };
+        document.head.appendChild(s);
+    });
+    return _moduleCache[src];
+}
