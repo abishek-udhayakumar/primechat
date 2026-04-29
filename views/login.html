@@ -2,15 +2,15 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
     <meta name="description" content="Sign in to PrimeChat — Premium real-time messaging">
     <title>Sign In — PrimeChat</title>
     <link rel="stylesheet" href="/css/variables.css">
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/auth.css">
-    <div id="toastContainer" class="toast-container"></div>
 </head>
 <body>
+    <div id="toastContainer" class="toast-container"></div>
     <main class="auth-page">
         <div class="auth-card">
             <!-- Logo -->
@@ -46,8 +46,11 @@
                 </div>
 
                 <button type="submit" class="auth-submit" id="loginBtn">
-                    <span id="loginBtnText">Sign In</span>
-                    <div class="spinner spinner--sm hidden" id="loginSpinner"></div>
+                    <span class="auth-btn-text" id="loginBtnText">Sign In</span>
+                    <span class="auth-btn-loading" id="loginBtnLoading">
+                        <span class="auth-spinner"></span>
+                        Signing in…
+                    </span>
                 </button>
             </form>
 
