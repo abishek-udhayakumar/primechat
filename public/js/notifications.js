@@ -41,13 +41,14 @@ const Notifier = (() => {
         return conv.last_message?.content || 'New message';
     }
 
-    /** Play the notification beep (reuse chat.js function if available) */
+    /** Play the notification beep with dedup cooldown */
+    let _lastBeepAt = 0;
     function _beep() {
-        if (typeof _playSound === 'function') {
-            _playSound();
-            return;
-        }
-        // Fallback: generate a short tone
+        // Prevent double beeps if chat.js and notification poll fire simultaneously
+        const now = Date.now();
+        if (now - _lastBeepAt < 2000) return;
+        _lastBeepAt = now;
+
         try {
             const ctx  = new (window.AudioContext || window.webkitAudioContext)();
             const osc  = ctx.createOscillator();
@@ -279,9 +280,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 500);
 });
 
-// ── Listen for chat open events ──
+// ── Listen for chat open events via EventBus ──
+EventBus.on('conversation:opened', (convId) => {
+    Notifier.onChatOpened(convId);
+});
+
+// ── Legacy CustomEvent bridge (keep backward compat) ──
 window.addEventListener('appStateChanged', e => {
     if (e.detail?.type === 'activeConversation') {
         Notifier.onChatOpened(window.appState.activeConversationId);
     }
 });
+

@@ -3,6 +3,38 @@
  * Common helpers, API requests, formatting
  */
 
+// ─────────────────────────────────────────
+// GLOBAL EVENT BUS — single communication channel
+// All modules emit/subscribe through this instead of
+// reaching into each other's internals.
+// ─────────────────────────────────────────
+const EventBus = (() => {
+    const _listeners = {};
+
+    function on(event, callback) {
+        if (!_listeners[event]) _listeners[event] = [];
+        _listeners[event].push(callback);
+        return () => off(event, callback); // returns unsubscribe fn
+    }
+
+    function off(event, callback) {
+        if (!_listeners[event]) return;
+        _listeners[event] = _listeners[event].filter(cb => cb !== callback);
+    }
+
+    function emit(event, data) {
+        if (!_listeners[event]) return;
+        for (const cb of _listeners[event]) {
+            try { cb(data); } catch (e) { console.error(`[EventBus] Error in ${event}:`, e); }
+        }
+    }
+
+    return { on, off, emit };
+})();
+
+// Expose globally
+window.EventBus = EventBus;
+
 const API_BASE = '/api';
 
 /**

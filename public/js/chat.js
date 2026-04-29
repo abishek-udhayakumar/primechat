@@ -83,6 +83,7 @@ window.openConversation = async (conversationId, otherUser) => {
     _startPolling();
 
     // Notify the notification engine this conversation is now active
+    EventBus.emit('conversation:opened', window.appState.activeConversationId);
     window.dispatchEvent(new CustomEvent('appStateChanged', { detail: { type: 'activeConversation' } }));
 
     document.getElementById('messageInput')?.focus();
@@ -770,6 +771,14 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && window.appState.activeConversationId) {
         _poll(); // immediate catch-up when tab becomes visible
     }
+});
+
+// ── EventBus: upload complete → trigger poll to fetch real message ──
+EventBus.on('upload:complete', () => {
+    if (window.appState.activeConversationId) {
+        _poll();
+    }
+    if (typeof loadConversations === 'function') loadConversations();
 });
 
 // ─────────────────────────────────────────

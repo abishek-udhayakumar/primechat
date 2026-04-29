@@ -2,7 +2,7 @@
  * PrimeChat — Main App State & Initialization
  */
 
-// Global State
+// Global State — single source of truth
 window.appState = {
     user: null,
     activeConversationId: null,
@@ -12,6 +12,9 @@ window.appState = {
     lastMessageId: null,
     isTyping: false,
     typingTimeout: null,
+    typingUsers: new Set(),
+    onlineUsers: new Set(),
+    unreadCount: 0,
     theme: 'dark',
     wallpaper: 'default',
     replyingTo: null

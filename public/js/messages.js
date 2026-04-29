@@ -526,7 +526,7 @@ function _toggleVoice(btn) {
     }
 
     _currentAudio.addEventListener('timeupdate', () => {
-        if (!_currentAudio.duration) return;
+        if (!_currentAudio || !_currentAudio.duration) return;
         const percent = _currentAudio.currentTime / _currentAudio.duration;
         
         // Update bars
