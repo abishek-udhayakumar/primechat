@@ -51,12 +51,15 @@ async function api(endpoint, options = {}, retryCount = 0) {
         
         return data;
     } catch (error) {
+        if (error.name === 'AbortError') {
+            throw error; // Quietly bubble up, don't retry or log
+        }
         if (retryCount < MAX_RETRIES && (error.name === 'TypeError' || error.message.includes('NetworkError'))) {
             const delay = Math.pow(2, retryCount) * 1000;
             await new Promise(r => setTimeout(r, delay));
             return api(endpoint, options, retryCount + 1);
         }
-        console.error('API Error:', error);
+        console.error(`[PrimeChat] API Error (${endpoint}):`, error);
         throw error;
     }
 }

@@ -10,7 +10,7 @@
 
 'use strict';
 
-const DOM_MESSAGE_LIMIT = 150; // max bubbles kept in DOM
+const DOM_MESSAGE_LIMIT = 250; // max bubbles kept in DOM
 let _domMsgCount = 0;          // fast counter — avoids querySelectorAll on every append
 
 window.initMessages = () => {
@@ -130,7 +130,7 @@ window._appendMessages = (msgs, container) => {
 
     if (typingBubble) container.appendChild(typingBubble);
 
-    _pruneDOM(container);
+    _pruneDOM(container, 'top');
 };
 
 // ─────────────────────────────────────────
@@ -178,44 +178,50 @@ window._prependMessages = (msgs) => {
     }
 
     container.insertBefore(frag, container.firstChild);
-    _pruneDOM(container);
+    _pruneDOM(container, 'bottom');
 };
 
 // ─────────────────────────────────────────
 // DOM PRUNING — remove oldest when over limit
-// Uses counter instead of querySelectorAll
 // ─────────────────────────────────────────
-function _pruneDOM(container) {
+function _pruneDOM(container, direction = 'top') {
     if (_domMsgCount <= DOM_MESSAGE_LIMIT) return;
 
     container = container || document.getElementById('messagesContainer');
     if (!container) return;
 
     const excess = _domMsgCount - DOM_MESSAGE_LIMIT;
-    const bubbles = container.querySelectorAll('.message[data-msg-id]');
-
-    // Only prune if we actually have excess (counter may drift slightly)
+    const bubbles = Array.from(container.querySelectorAll('.message[data-msg-id]'));
+    
     const toRemove = Math.min(excess, bubbles.length);
     if (toRemove <= 0) return;
 
-    for (let i = 0; i < toRemove; i++) {
-        const bubble = bubbles[i];
-        const prev   = bubble.previousElementSibling;
+    const removeTargets = direction === 'top' 
+        ? bubbles.slice(0, toRemove) 
+        : bubbles.slice(-toRemove);
+
+    removeTargets.forEach(bubble => {
+        const prev = bubble.previousElementSibling;
         bubble.remove();
-        // Remove orphaned date divider
+        // Clean up orphaned date dividers
         if (prev && prev.classList.contains('message-date-divider')) {
             const next = prev.nextElementSibling;
             if (!next || next.classList.contains('message-date-divider')) {
                 prev.remove();
             }
         }
-    }
+    });
 
     _domMsgCount = Math.max(0, _domMsgCount - toRemove);
 
-    // Sync appState array to save RAM
+    // Sync appState array in tandem
     if (window.appState?.messages) {
-        window.appState.messages = window.appState.messages.slice(toRemove);
+        if (direction === 'top') {
+            window.appState.messages = window.appState.messages.slice(toRemove);
+        } else {
+            window.appState.messages = window.appState.messages.slice(0, window.appState.messages.length - toRemove);
+            window.appState.lastMessageId = window.appState.messages.length ? _lastId(window.appState.messages) : 0;
+        }
     }
 }
 

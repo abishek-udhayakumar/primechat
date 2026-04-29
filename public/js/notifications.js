@@ -138,7 +138,10 @@ const Notifier = (() => {
             if (prev !== undefined && unread > prev) {
                 sidebarDirty = true;
 
-                if (!viewing) {
+                // Ensure the message isn't from the current user (optimistic updates could trigger this if not careful)
+                const isFromMe = conv.last_message && conv.last_message.sender_id === window.appState?.user?.id;
+
+                if (!viewing && !isFromMe) {
                     soundNeeded = true;
                     const sender  = conv.other_user?.display_name || 'Someone';
                     const preview = _preview(conv);
@@ -164,24 +167,40 @@ const Notifier = (() => {
 
         _updateTitle(totalUnread);
 
-        // Update sidebar — always sync state, but only re-render if something changed
-        window.appState.conversations = conversations;
+        // Merge updates into appState.conversations to preserve infinite scroll
+        const existingMap = new Map((window.appState.conversations || []).map(c => [c.conversation_id, c]));
+        conversations.forEach(c => { existingMap.set(c.conversation_id, c); });
+        
+        // Sort merged list by last message time
+        window.appState.conversations = Array.from(existingMap.values()).sort((a, b) => {
+            const tA = new Date(a.last_message?.time || a.last_message?.created_at || 0).getTime();
+            const tB = new Date(b.last_message?.time || b.last_message?.created_at || 0).getTime();
+            return tB - tA;
+        });
+
         if (sidebarDirty && typeof renderConversations === 'function') {
             renderConversations();
         }
     }
 
     // ── Background Poll ──
+    let _notifAbortController = null;
 
     async function _poll() {
         clearTimeout(_pollTimeout);
+        if (_notifAbortController) _notifAbortController.abort();
+        _notifAbortController = new AbortController();
+
         try {
-            const res = await api('/chat/conversations');
+            // Poll for top 20 conversations to catch recent activity
+            const res = await api('/chat/conversations?limit=20', { signal: _notifAbortController.signal });
             if (!res?.success) return;
-            const conversations = (res.data.cs || []).map(_remapConv);
+            const conversations = (res.data.conversations || res.data.cs || []).map(_remapConv);
             _process(conversations);
-        } catch (_) {} finally {
-            const interval = document.visibilityState === 'visible' ? 5000 : 30000;
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+        } finally {
+            const interval = document.visibilityState === 'visible' ? 5000 : 15000;
             _pollTimeout = setTimeout(_poll, interval);
         }
     }
@@ -203,17 +222,22 @@ const Notifier = (() => {
         if (_started) return;
         _started = true;
 
-        // Request browser notification permission
+        // Defer browser notification permission to a user gesture
+        // Attach to the document body exactly once
         if ('Notification' in window && Notification.permission === 'default') {
-            Notification.requestPermission().then(p => { _permission = p; });
+            const requestPerm = () => {
+                Notification.requestPermission().then(p => { _permission = p; });
+                document.body.removeEventListener('click', requestPerm);
+            };
+            document.body.addEventListener('click', requestPerm, { once: true });
         } else if ('Notification' in window) {
             _permission = Notification.permission;
         }
 
         // Baseline: capture current unreads WITHOUT firing notifications
-        api('/chat/conversations').then(res => {
+        api('/chat/conversations?limit=20').then(res => {
             if (!res?.success) return;
-            const convs = (res.data.cs || []).map(_remapConv);
+            const convs = (res.data.conversations || res.data.cs || []).map(_remapConv);
             window.appState.conversations = convs;
             for (const c of convs) {
                 _prevUnread[c.conversation_id] = c.unread_count || 0;

@@ -7,6 +7,7 @@
 
 // ── Polling state ──
 let _pollTimeout = null;
+let _pollAbortController = null;
 let _typingTimer = null;
 let _typingDebounceTimer = null;
 let _isSending = false;
@@ -209,6 +210,10 @@ function _stopPolling() {
         clearTimeout(_pollTimeout);
         _pollTimeout = null;
     }
+    if (_pollAbortController) {
+        _pollAbortController.abort();
+        _pollAbortController = null;
+    }
 }
 
 function _getPollInterval() {
@@ -236,8 +241,15 @@ async function _poll() {
         return;
     }
 
+    if (_pollAbortController) {
+        _pollAbortController.abort();
+    }
+    _pollAbortController = new AbortController();
+
     try {
-        const res = await api(`/chat/poll?conversation_id=${convId}&last_id=${lastId}`);
+        const res = await api(`/chat/poll?conversation_id=${convId}&last_id=${lastId}`, {
+            signal: _pollAbortController.signal
+        });
         if (!res?.success) return;
 
         const { ms: shorthandMsgs, ty, us, ls, lr } = res.data;
@@ -261,12 +273,24 @@ async function _poll() {
         // ── Append genuinely new messages ──
         if (messages && messages.length > 0) {
             const existingIds = new Set(window.appState.messages.map(m => m.id));
-            const existingClientIds = new Set(window.appState.messages.filter(m => m.client_msg_id).map(m => m.client_msg_id));
+            const tempMessagesByClientId = new Map();
+            window.appState.messages.forEach(m => {
+                if (typeof m.id === 'string' && m.id.startsWith('c_')) {
+                    tempMessagesByClientId.set(m.id, m);
+                }
+            });
 
-            const newMsgs = messages.filter(m => {
-                if (existingIds.has(m.id)) return false;
-                if (m.client_msg_id && existingClientIds.has(m.client_msg_id)) return false;
-                return true;
+            const newMsgs = [];
+            messages.forEach(m => {
+                if (existingIds.has(m.id)) return;
+                
+                if (m.client_msg_id && tempMessagesByClientId.has(m.client_msg_id)) {
+                    // This is a server response for our optimistic temp message!
+                    // Replace it instead of ignoring it to prevent duplicates
+                    _replaceTempMessage(m.client_msg_id, m);
+                } else {
+                    newMsgs.push(m);
+                }
             });
 
             if (newMsgs.length > 0) {
@@ -292,6 +316,7 @@ async function _poll() {
             }
         }
     } catch (e) {
+        if (e.name === 'AbortError') return;
         console.error('[PrimeChat] Poll error:', e);
     } finally {
         // Schedule next poll adaptively
@@ -366,9 +391,12 @@ async function sendMessage(content = null, type = 'text') {
                 loadConversations();
             }
 
-            // Replace temp message with server-confirmed message
-            const confirmedMsg = _remapMessage(res.data.message);
-            _replaceTempMessage(tempId, confirmedMsg);
+            // Check if poll already replaced it in the background
+            const stillTemp = window.appState.messages.find(m => m.id === tempId);
+            if (stillTemp) {
+                const confirmedMsg = _remapMessage(res.data.message);
+                _replaceTempMessage(tempId, confirmedMsg);
+            }
             window.appState.lastMessageId = _lastId(window.appState.messages);
             loadConversations();
         }
