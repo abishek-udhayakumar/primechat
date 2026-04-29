@@ -1,12 +1,13 @@
 /**
  * PrimeChat — Voice Recording
- * Uses MediaRecorder API
+ * Uses MediaRecorder API and WebAudio for live visualization
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     const voiceBtn = document.getElementById('voiceBtn');
     const recordingBar = document.getElementById('voiceRecordingBar');
     const timeDisplay = document.getElementById('voiceRecordingTime');
+    const indicator = document.querySelector('.voice-recording-indicator');
     const cancelBtn = document.getElementById('voiceRecordingCancel');
     const inputWrapper = document.getElementById('chatInputWrapper');
     const actionsLeft = document.querySelector('.input-actions-left');
@@ -17,6 +18,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let audioChunks = [];
     let startTime = 0;
     let timerInterval = null;
+    
+    // WebAudio for visualizer
+    let audioContext = null;
+    let analyser = null;
+    let microphone = null;
+    let animationFrameId = null;
     
     voiceBtn.addEventListener('mousedown', startRecording);
     voiceBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
@@ -38,11 +45,41 @@ document.addEventListener('DOMContentLoaded', () => {
             mediaRecorder = new MediaRecorder(stream);
             audioChunks = [];
             
+            // Setup Visualizer
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            microphone = audioContext.createMediaStreamSource(stream);
+            microphone.connect(analyser);
+            
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            
+            const updateVisualizer = () => {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for(let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / dataArray.length;
+                // Base scale 1, max scale 1.5 based on average volume (0-255)
+                const scale = 1 + (average / 255) * 0.5;
+                if (indicator) indicator.style.transform = `scale(${scale})`;
+                
+                animationFrameId = requestAnimationFrame(updateVisualizer);
+            };
+            
+            updateVisualizer();
+            
             mediaRecorder.addEventListener('dataavailable', event => {
                 audioChunks.push(event.data);
             });
             
             mediaRecorder.addEventListener('stop', () => {
+                // Stop visualizer
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                if (audioContext && audioContext.state !== 'closed') audioContext.close();
+                if (indicator) indicator.style.transform = 'scale(1)';
+                
                 // If cancelled, chunks will be cleared
                 if (audioChunks.length > 0) {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
@@ -50,20 +87,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     if (duration > 0) {
                         const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: 'audio/webm' });
-                        // Add duration as custom property to send to our upload handler
-                        file.duration = duration;
-                        
-                        // Fake a file upload call
-                        const fakeInput = { target: { files: [file] } };
-                        // We need to modify uploadFile in upload.js to accept duration
-                        // For now we just call it
+                        // Fake UI loading
+                        timeDisplay.textContent = 'Sending...';
+                        cancelBtn.style.display = 'none';
                         uploadVoiceMessage(file, duration);
+                    } else {
+                        resetUI();
                     }
+                } else {
+                    resetUI();
                 }
                 
                 // Cleanup
                 stream.getTracks().forEach(track => track.stop());
-                resetUI();
             });
             
             mediaRecorder.start();
@@ -73,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             voiceBtn.classList.add('recording');
             inputWrapper.style.display = 'none';
             actionsLeft.style.display = 'none';
+            cancelBtn.style.display = 'block';
             recordingBar.classList.add('show');
             
             timerInterval = setInterval(() => {
@@ -109,6 +146,8 @@ document.addEventListener('DOMContentLoaded', () => {
         actionsLeft.style.display = 'flex';
         recordingBar.classList.remove('show');
         timeDisplay.textContent = '00:00';
+        cancelBtn.style.display = 'block';
+        if (indicator) indicator.style.transform = 'scale(1)';
     }
     
     async function uploadVoiceMessage(file, duration) {
@@ -143,6 +182,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error(e);
             showToast(`Voice upload failed: ${e.message}`, 'error');
+        } finally {
+            resetUI();
         }
     }
 });

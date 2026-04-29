@@ -840,8 +840,9 @@
     width: 10px; height: 10px;
     border-radius: var(--radius-full);
     background: var(--color-danger);
-    animation: blink 1s ease-in-out infinite;
     flex-shrink: 0;
+    transition: transform 50ms ease;
+    transform-origin: center;
 }
 @keyframes blink {
     0%, 100% { opacity: 1; }

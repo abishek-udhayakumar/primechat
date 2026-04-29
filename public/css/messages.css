@@ -324,11 +324,13 @@
 .voice-waveform-bar {
     width: 3px;
     border-radius: 2px;
-    background: rgba(255,255,255,0.45);
+    background: rgba(255,255,255,0.25);
     flex-shrink: 0;
-    transition: background var(--transition-fast);
+    transition: background var(--transition-fast), opacity var(--transition-fast);
 }
-.message.received .voice-waveform-bar { background: var(--color-accent); opacity: 0.5; }
+.voice-waveform-bar.played { background: rgba(255,255,255,0.85); }
+.message.received .voice-waveform-bar { background: var(--color-accent); opacity: 0.25; }
+.message.received .voice-waveform-bar.played { opacity: 1; }
 .voice-duration {
     font-size: 11px;
     opacity: 0.65;

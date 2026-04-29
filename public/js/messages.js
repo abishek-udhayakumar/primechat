@@ -459,22 +459,86 @@ window.scrollToMessage = (msgId) => {
 // VOICE PLAYBACK
 // ─────────────────────────────────────────
 let _currentAudio = null;
+let _currentAudioBtn = null;
 
 function _toggleVoice(btn) {
     const src = btn.dataset.src;
     if (!src) return;
 
-    if (_currentAudio && !_currentAudio.paused) {
-        _currentAudio.pause();
-        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+    // Helper to reset a button's UI to paused state
+    const resetUI = (button) => {
+        if (!button) return;
+        button.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+        const wrapper = button.closest('.message-voice');
+        if (wrapper) {
+            const bars = wrapper.querySelectorAll('.voice-waveform-bar');
+            bars.forEach(bar => bar.classList.remove('played'));
+            const durationEl = wrapper.querySelector('.voice-duration');
+            if (durationEl && durationEl.dataset.originalDuration) {
+                durationEl.textContent = durationEl.dataset.originalDuration;
+            }
+        }
+    };
+
+    // If clicking the currently playing button
+    if (_currentAudio && _currentAudioBtn === btn) {
+        if (!_currentAudio.paused) {
+            _currentAudio.pause();
+            resetUI(btn);
+        } else {
+            _currentAudio.play();
+            btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+        }
         return;
     }
 
+    // Stop and reset any other playing audio
+    if (_currentAudio) {
+        _currentAudio.pause();
+        resetUI(_currentAudioBtn);
+    }
+
+    // Create new audio instance
     _currentAudio = new Audio(src);
+    _currentAudioBtn = btn;
+    
+    const wrapper = btn.closest('.message-voice');
+    const bars = wrapper ? wrapper.querySelectorAll('.voice-waveform-bar') : [];
+    const durationEl = wrapper ? wrapper.querySelector('.voice-duration') : null;
+    
+    if (durationEl && !durationEl.dataset.originalDuration) {
+        durationEl.dataset.originalDuration = durationEl.textContent;
+    }
+
+    _currentAudio.addEventListener('timeupdate', () => {
+        if (!_currentAudio.duration) return;
+        const percent = _currentAudio.currentTime / _currentAudio.duration;
+        
+        // Update bars
+        const activeBarsCount = Math.floor(percent * bars.length);
+        bars.forEach((bar, index) => {
+            if (index < activeBarsCount) {
+                bar.classList.add('played');
+            } else {
+                bar.classList.remove('played');
+            }
+        });
+        
+        // Update duration text
+        if (durationEl) {
+            const currentSecs = Math.floor(_currentAudio.currentTime);
+            const totalSecs = Math.floor(_currentAudio.duration) || parseInt(durationEl.dataset.originalDuration.replace('s','')) || 0;
+            const formatTime = (s) => `${Math.floor(s/60)}:${(s%60).toString().padStart(2, '0')}`;
+            durationEl.textContent = `${formatTime(currentSecs)} / ${formatTime(totalSecs)}`;
+        }
+    });
+
     _currentAudio.play().then(() => {
         btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
         _currentAudio.onended = () => {
-            btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+            resetUI(btn);
+            _currentAudio = null;
+            _currentAudioBtn = null;
         };
     }).catch(() => showToast('Cannot play audio', 'error'));
 }
