@@ -3,9 +3,8 @@
 
 PrimeChat is a real-time chat application built to provide smooth and reliable communication between users. This project focuses on real-time messaging, user handling, and a clean user experience.
 
-## 🌐 Live Demo
-👉 (Add your live link here)
-
+## 🌐 Live Demo 
+https://primechat-6nzu.onrender.com
 ---
 
 ## 📌 Features
