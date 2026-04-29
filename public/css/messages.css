@@ -260,6 +260,20 @@
 .message-image:hover img { filter: brightness(0.92); }
 .message-image + .message-text { margin-top: var(--space-2); }
 
+/* Upload Progress Bar */
+.upload-progress-wrapper {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 4px;
+    background: rgba(0,0,0,0.3);
+}
+.upload-progress-bar {
+    height: 100%;
+    background: var(--color-accent);
+    width: 0%;
+    transition: width 0.2s ease-out;
+}
+
 /* ── File Message ── */
 .message-file {
     display: flex;
@@ -349,7 +363,15 @@
     border-bottom-left-radius: 4px;
     width: fit-content;
     margin-bottom: var(--space-2);
-    animation: msgIn 0.2s ease-out;
+    opacity: 0;
+    transform: translateY(8px) scale(0.95);
+    transform-origin: bottom left;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    will-change: opacity, transform;
+}
+.typing-indicator-bubble.active {
+    opacity: 1;
+    transform: translateY(0) scale(1);
 }
 .typing-dot {
     width: 7px; height: 7px;

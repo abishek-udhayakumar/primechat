@@ -25,6 +25,7 @@ window.initChat = () => {
     _bindInputHandlers();
     _bindScrollHandlers();
     _bindPanelHandlers();
+    _bindMessageSearchHandlers();
     document.getElementById('cancelReplyBtn')?.addEventListener('click', cancelReply);
 };
 
@@ -268,7 +269,7 @@ async function _poll() {
         _toggleTypingBubble(typing);
 
         // ── Update read-receipt ticks ──
-        _updateReadTicks(other_last_read);
+        _updateReadTicks(other_last_read, other_user_status, other_last_seen);
 
         // ── Append genuinely new messages ──
         if (messages && messages.length > 0) {
@@ -435,7 +436,7 @@ function notifyTyping(isTyping) {
 
     if (isTyping) {
         clearTimeout(_typingTimer);
-        _typingTimer = setTimeout(() => notifyTyping(false), 4000);
+        _typingTimer = setTimeout(() => notifyTyping(false), 2000);
     }
 }
 
@@ -560,15 +561,27 @@ function _replaceTempMessage(tempId, serverMsg) {
     }
 }
 
-function _updateReadTicks(otherLastRead) {
-    if (!otherLastRead) return;
+function _updateReadTicks(otherLastRead, otherUserStatus, otherLastSeen) {
     // Only scan the most recent 50 messages — avoids O(n) DOM queries on long chats
     const msgs = window.appState.messages;
     const start = Math.max(0, msgs.length - 50);
     for (let i = msgs.length - 1; i >= start; i--) {
         const msg = msgs[i];
         if (!msg.is_mine || typeof msg.id !== 'number') continue;
-        const newStatus = msg.id <= otherLastRead ? 'read' : 'delivered';
+        
+        let newStatus = 'sent';
+        if (otherLastRead !== null && msg.id <= otherLastRead) {
+            newStatus = 'read';
+        } else {
+            if (otherUserStatus === 'online') {
+                newStatus = 'delivered';
+            } else if (otherLastSeen && msg.created_at) {
+                if (new Date(otherLastSeen) >= new Date(msg.created_at)) {
+                    newStatus = 'delivered';
+                }
+            }
+        }
+        
         if (msg.read_status === newStatus) continue;
         msg.read_status = newStatus;
         const el = document.getElementById(`msg_${msg.id}`);
@@ -635,10 +648,22 @@ function _toggleTypingBubble(isTyping) {
             bubble.className = 'typing-indicator-bubble';
             bubble.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
             container.appendChild(bubble);
+            // Small delay to allow DOM insertion before transition
+            requestAnimationFrame(() => bubble.classList.add('active'));
             if (_isAtBottom()) scrollToBottom(true);
+        } else if (!bubble.classList.contains('active')) {
+            bubble.classList.add('active');
         }
     } else {
-        if (bubble) bubble.remove();
+        if (bubble && bubble.classList.contains('active')) {
+            bubble.classList.remove('active');
+            // Remove from DOM after fade out completes (e.g., 200ms)
+            setTimeout(() => {
+                if (bubble && !bubble.classList.contains('active')) {
+                    bubble.remove();
+                }
+            }, 250);
+        }
     }
 }
 
@@ -783,3 +808,97 @@ document.addEventListener('visibilitychange', () => {
     window.visualViewport.addEventListener('resize', _onVpResize, { passive: true });
     window.visualViewport.addEventListener('scroll', _onVpResize, { passive: true });
 })();
+
+// ─────────────────────────────────────────
+// MESSAGE SEARCH
+// ─────────────────────────────────────────
+function _bindMessageSearchHandlers() {
+    const toggleBtn = document.getElementById('msgSearchToggleBtn');
+    const closeBtn = document.getElementById('msgSearchCloseBtn');
+    const searchBar = document.getElementById('msgSearchBar');
+    const searchInput = document.getElementById('msgSearchInput');
+    const searchResults = document.getElementById('msgSearchResults');
+    let debounceTimer = null;
+
+    if (!toggleBtn || !searchBar) return;
+
+    toggleBtn.addEventListener('click', () => {
+        if (searchBar.style.display === 'none') {
+            searchBar.style.display = 'flex';
+            searchInput.focus();
+        } else {
+            searchBar.style.display = 'none';
+            searchResults.style.display = 'none';
+            searchInput.value = '';
+        }
+    });
+
+    closeBtn.addEventListener('click', () => {
+        searchBar.style.display = 'none';
+        searchResults.style.display = 'none';
+        searchInput.value = '';
+    });
+
+    searchInput.addEventListener('input', (e) => {
+        clearTimeout(debounceTimer);
+        const query = e.target.value.trim();
+        
+        if (!query) {
+            searchResults.style.display = 'none';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            const convId = window.appState.activeConversationId;
+            if (!convId) return;
+
+            try {
+                const res = await api(`/search/messages?conversation_id=${convId}&query=${encodeURIComponent(query)}`);
+                if (res?.success && res.data.length > 0) {
+                    _renderMessageSearchResults(res.data, query);
+                } else {
+                    searchResults.style.display = 'block';
+                    searchResults.innerHTML = '<div style="padding: 15px; text-align: center; color: var(--color-text-secondary); font-size: 13px;">No messages found</div>';
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }, 300);
+    });
+}
+
+function _renderMessageSearchResults(results, query) {
+    const searchResults = document.getElementById('msgSearchResults');
+    if (!searchResults) return;
+
+    searchResults.style.display = 'block';
+    
+    // Escape query for regex safely
+    const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedQuery})`, 'gi');
+
+    searchResults.innerHTML = results.map(msg => {
+        const highlighted = escapeHTML(msg.content).replace(regex, '<mark>$1</mark>');
+        const date = new Date(msg.created_at);
+        const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        
+        return `
+            <div class="msg-search-result-item" data-id="${msg.id}">
+                <div class="msg-search-result-header">
+                    <span>${escapeHTML(msg.sender_name)}</span>
+                    <span>${dateStr}</span>
+                </div>
+                <div class="msg-search-result-content">${highlighted}</div>
+            </div>
+        `;
+    }).join('');
+
+    // Clicking a result
+    searchResults.querySelectorAll('.msg-search-result-item').forEach(item => {
+        item.addEventListener('click', () => {
+            document.getElementById('msgSearchBar').style.display = 'none';
+            searchResults.style.display = 'none';
+            showToast('Result found! (Pagination scrolling coming soon)', 'info');
+        });
+    });
+}

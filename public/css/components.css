@@ -418,3 +418,50 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+/* ── Upload Preview Modal ── */
+.upload-preview-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: var(--z-modal);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    animation: fadeIn var(--transition-fast) ease-out;
+}
+.upload-preview-content {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 400px;
+    padding: var(--space-4);
+    box-shadow: var(--shadow-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    animation: slideUp var(--transition-fast) ease-out;
+}
+.upload-preview-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    padding: var(--space-2);
+}
+.preview-file-icon {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+.upload-preview-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-3);
+}

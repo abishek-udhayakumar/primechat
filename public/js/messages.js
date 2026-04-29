@@ -304,8 +304,15 @@ function _buildContent(bubble, msg) {
         img.loading = 'lazy';
         img.decoding = 'async';
 
-        // Use IntersectionObserver when available (set by app.js)
-        if (window._imgObserver) {
+        img.decoding = 'async';
+
+        if (msg.attachment._isUploading) {
+            img.src = src; // local blob URL
+            const progressWrapper = document.createElement('div');
+            progressWrapper.className = 'upload-progress-wrapper';
+            progressWrapper.innerHTML = `<div class="upload-progress-bar"></div>`;
+            wrap.appendChild(progressWrapper);
+        } else if (window._imgObserver) {
             img.dataset.lazySrc = src;
             img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"%3E%3C/svg%3E'; // tiny placeholder
             img.style.minHeight = '80px';
@@ -326,6 +333,13 @@ function _buildContent(bubble, msg) {
         const fileDiv = document.createElement('div');
         fileDiv.className = 'message-file';
         fileDiv.dataset.src = '/' + f.file_path; // used by delegated listener
+        
+        let progressHTML = '';
+        if (f._isUploading) {
+            progressHTML = `<div class="upload-progress-wrapper" style="position:absolute; bottom:0; left:0; right:0; height:4px; border-radius:0 0 var(--radius-md) var(--radius-md);"><div class="upload-progress-bar"></div></div>`;
+            fileDiv.style.position = 'relative';
+        }
+
         fileDiv.innerHTML =
             `<div class="message-file-icon">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
@@ -333,7 +347,8 @@ function _buildContent(bubble, msg) {
              <div class="message-file-info">
                 <div class="message-file-name">${escapeHTML(f.file_name)}</div>
                 <div class="message-file-size">${formatSize(f.file_size || 0)}</div>
-             </div>`;
+             </div>
+             ${progressHTML}`;
         bubble.appendChild(fileDiv);
         return;
     }

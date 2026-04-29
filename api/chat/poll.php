@@ -43,6 +43,9 @@ $rawMessages = $msgModel->getForConversation($conversationId, $userId, $lastId >
 // ── 2. Other user's last_read_message_id ──
 $otherLastRead = $msgModel->getReadStatusBatch($conversationId, $userId);
 
+// ── 3. Other user online status ──
+$otherUser = $convModel->getOtherParticipant($conversationId, $userId);
+
 $messages = [];
 foreach ($rawMessages as $msg) {
     if ($lastId > 0 && (int)$msg['id'] <= $lastId) continue;
@@ -53,7 +56,13 @@ foreach ($rawMessages as $msg) {
         if ($otherLastRead !== null && $otherLastRead >= $formatted['i']) {
             $formatted['rs'] = 'read';
         } else {
-            $formatted['rs'] = 'delivered';
+            $isDelivered = false;
+            if ($otherUser && $otherUser['status'] === 'online') {
+                $isDelivered = true;
+            } elseif ($otherUser && $otherUser['last_seen'] && $msg['created_at']) {
+                $isDelivered = strtotime($otherUser['last_seen']) >= strtotime($msg['created_at']);
+            }
+            $formatted['rs'] = $isDelivered ? 'delivered' : 'sent';
         }
     }
     $messages[] = $formatted;
@@ -63,8 +72,7 @@ foreach ($rawMessages as $msg) {
 $chat        = new Chat();
 $typingUsers = $chat->getTypingUsers($conversationId, $userId);
 
-// ── 5. Other user online status ──
-$otherUser = $convModel->getOtherParticipant($conversationId, $userId);
+// ── 5. Status Payload ──
 
 Response::success([
     'ms' => $messages,      // messages
