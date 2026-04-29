@@ -310,7 +310,7 @@ function _buildContent(bubble, msg) {
             img.src = src; // local blob URL
             const progressWrapper = document.createElement('div');
             progressWrapper.className = 'upload-progress-wrapper';
-            progressWrapper.innerHTML = `<div class="upload-progress-bar"></div>`;
+            progressWrapper.innerHTML = `<div class="upload-progress-bar"></div><span class="upload-progress-pct">0%</span><button class="upload-cancel-btn" title="Cancel">✕</button>`;
             wrap.appendChild(progressWrapper);
         } else if (window._imgObserver) {
             img.dataset.lazySrc = src;
@@ -336,7 +336,7 @@ function _buildContent(bubble, msg) {
         
         let progressHTML = '';
         if (f._isUploading) {
-            progressHTML = `<div class="upload-progress-wrapper" style="position:absolute; bottom:0; left:0; right:0; height:4px; border-radius:0 0 var(--radius-md) var(--radius-md);"><div class="upload-progress-bar"></div></div>`;
+            progressHTML = `<div class="upload-progress-wrapper" style="position:absolute; bottom:0; left:0; right:0; height:4px; border-radius:0 0 var(--radius-md) var(--radius-md);"><div class="upload-progress-bar"></div><span class="upload-progress-pct">0%</span><button class="upload-cancel-btn" title="Cancel">✕</button></div>`;
             fileDiv.style.position = 'relative';
         }
 

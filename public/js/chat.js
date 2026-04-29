@@ -20,6 +20,23 @@ const POLL_INTERVAL_ACTIVE = 3000;
 const POLL_INTERVAL_IDLE = 10000;
 const IDLE_THRESHOLD = 30000; // 30s
 
+// ── Message Cache (stale-while-revalidate) ──
+const _msgCache = {};
+
+function _cacheMessages(convId) {
+    if (!convId || !window.appState.messages.length) return;
+    const msgs = window.appState.messages.filter(m => typeof m.id === 'number');
+    if (msgs.length > 100) {
+        _msgCache[convId] = msgs.slice(-100);
+    } else {
+        _msgCache[convId] = msgs;
+    }
+}
+
+function _getCachedMessages(convId) {
+    return _msgCache[convId] || null;
+}
+
 // ── Initialize chat module ──
 window.initChat = () => {
     _bindInputHandlers();
@@ -97,19 +114,40 @@ async function _loadInitialMessages() {
     const convId = window.appState.activeConversationId;
     if (!convId) return;
 
+    // 1. Show cached messages instantly (stale-while-revalidate)
+    const cached = _getCachedMessages(convId);
+    if (cached && cached.length > 0) {
+        window.appState.messages = [...cached];
+        window.appState.lastMessageId = _lastId(cached);
+        window.renderMessages(cached);
+        scrollToBottom(false);
+    }
+
+    // 2. Fetch fresh from server
     try {
         const res = await api(`/chat/messages?conversation_id=${convId}&limit=50`);
         if (!res?.success) return;
 
-        window.appState.messages = (res.data.ms || []).map(_remapMessage);
-        window.appState.lastMessageId = _lastId(window.appState.messages);
+        const freshMsgs = (res.data.ms || []).map(_remapMessage);
+        window.appState.messages = freshMsgs;
+        window.appState.lastMessageId = _lastId(freshMsgs);
         _hasMoreHistory = res.data.hm;
 
-        window.renderMessages(window.appState.messages);
-        scrollToBottom(false);
+        // Only re-render if data differs from cache
+        if (!cached || freshMsgs.length !== cached.length ||
+            _lastId(freshMsgs) !== _lastId(cached)) {
+            window.renderMessages(freshMsgs);
+            scrollToBottom(false);
+        }
+
+        _cacheMessages(convId);
         _markLastRead();
     } catch (e) {
         console.error('[PrimeChat] Initial load failed:', e);
+        // If cache was shown, user sees something useful
+        if (!cached) {
+            showToast('Failed to load messages', 'error');
+        }
     }
 }
 
@@ -345,6 +383,9 @@ async function _poll() {
                 if (!newMsgs[newMsgs.length - 1].is_mine) {
                     _playSound();
                 }
+
+                // Update cache
+                _cacheMessages(convId);
             }
         }
     } catch (e) {

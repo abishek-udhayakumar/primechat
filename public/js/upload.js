@@ -211,11 +211,27 @@ function _uploadFileWithProgress(file, uploadType) {
 
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-            const pct = (e.loaded / e.total) * 100;
-            const bar = document.querySelector(`.message[data-id="${tempId}"] .upload-progress-bar`);
-            if (bar) bar.style.width = pct + '%';
+            const pct = Math.round((e.loaded / e.total) * 100);
+            const wrapper = document.querySelector(`.message[data-id="${tempId}"]`);
+            if (wrapper) {
+                const bar = wrapper.querySelector('.upload-progress-bar');
+                if (bar) bar.style.width = pct + '%';
+                const pctText = wrapper.querySelector('.upload-progress-pct');
+                if (pctText) pctText.textContent = pct + '%';
+            }
         }
     };
+
+    // Store xhr reference for cancel
+    const cancelBtn = document.querySelector(`.message[data-id="${tempId}"] .upload-cancel-btn`);
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            xhr.abort();
+            _removeTempUpload(tempId);
+            showToast('Upload cancelled');
+        });
+    }
 
     xhr.onload = () => {
         _removeTempUpload(tempId);

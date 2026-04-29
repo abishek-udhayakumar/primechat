@@ -56,6 +56,7 @@ async function api(endpoint, options = {}, retryCount = 0) {
         headers['Content-Type'] = 'application/json';
     }
 
+    const _apiStart = performance.now();
     try {
         const response = await fetch(url, {
             ...options,
@@ -63,6 +64,9 @@ async function api(endpoint, options = {}, retryCount = 0) {
             headers,
             body
         });
+
+        const _apiMs = performance.now() - _apiStart;
+        PrimeLog.api(endpoint, _apiMs, response.ok);
 
         if (response.status === 401 && !['/login', '/', '/signup'].includes(window.location.pathname)) {
             window.location.href = '/login';

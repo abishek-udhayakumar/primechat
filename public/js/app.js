@@ -89,37 +89,60 @@ function initApp() {
     }, { once: true });
 
     // ── LAZY MODULE: Emoji picker ──
-    document.getElementById('emojiBtn')?.addEventListener('click', async () => {
-        await _loadModule('/js/emoji.js');
-        if (window.initEmoji) window.initEmoji();
-        document.getElementById('emojiBtn')?.click(); // re-fire so the picker opens
-    }, { once: true });
+    let _emojiLoaded = false;
+    document.getElementById('emojiBtn')?.addEventListener('click', async (e) => {
+        if (!_emojiLoaded) {
+            e.stopImmediatePropagation();
+            await _loadModule('/js/emoji.js');
+            if (window.initEmoji) window.initEmoji();
+            _emojiLoaded = true;
+            // Now re-fire so the actual emoji handler runs
+            document.getElementById('emojiBtn')?.click();
+        }
+    });
 
     // ── LAZY MODULE: Upload (file attach + drag-drop) ──
-    document.getElementById('attachBtn')?.addEventListener('click', async () => {
+    let _uploadLoaded = false;
+    const _ensureUpload = async () => {
+        if (_uploadLoaded) return;
         await _loadModule('/js/upload.js');
         if (window.initUpload) window.initUpload();
-        document.getElementById('attachBtn')?.click(); // re-fire
-    }, { once: true });
+        _uploadLoaded = true;
+    };
+    document.getElementById('attachBtn')?.addEventListener('click', async (e) => {
+        if (!_uploadLoaded) {
+            e.stopImmediatePropagation();
+            await _ensureUpload();
+            document.getElementById('attachBtn')?.click();
+        }
+    });
     // Also lazy-load on drag-over the entire app
-    document.querySelector('.chat-app')?.addEventListener('dragover', async () => {
-        await _loadModule('/js/upload.js');
-        if (window.initUpload) window.initUpload();
-    }, { once: true, passive: true });
+    document.querySelector('.chat-app')?.addEventListener('dragover', () => _ensureUpload(), { once: true, passive: true });
 
     // ── LAZY MODULE: Voice recording ──
-    document.getElementById('voiceBtn')?.addEventListener('click', async () => {
-        await _loadModule('/js/voice.js');
-        if (window.initVoice) window.initVoice();
-        document.getElementById('voiceBtn')?.click(); // re-fire
-    }, { once: true });
+    let _voiceLoaded = false;
+    document.getElementById('voiceBtn')?.addEventListener('click', async (e) => {
+        if (!_voiceLoaded) {
+            e.stopImmediatePropagation();
+            await _loadModule('/js/voice.js');
+            if (window.initVoice) window.initVoice();
+            _voiceLoaded = true;
+            // Re-fire so the actual handler runs  
+            document.getElementById('voiceBtn')?.click();
+        }
+    });
 
     // ── LAZY MODULE: Profile panel ──
-    document.getElementById('sidebarProfileTrigger')?.addEventListener('click', async () => {
-        await _loadModule('/js/profile.js');
-        if (window.initProfile) window.initProfile();
-        document.getElementById('sidebarProfileTrigger')?.click(); // re-fire
-    }, { once: true });
+    let _profileLoaded = false;
+    document.getElementById('sidebarProfileTrigger')?.addEventListener('click', async (e) => {
+        if (!_profileLoaded) {
+            e.stopImmediatePropagation();
+            await _loadModule('/js/profile.js');
+            if (window.initProfile) window.initProfile();
+            _profileLoaded = true;
+            document.getElementById('sidebarProfileTrigger')?.click();
+        }
+    });
 
     // ── Image lazy loading via IntersectionObserver ──
     // Observes images in the messages container and sets src only when visible
