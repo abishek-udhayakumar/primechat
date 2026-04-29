@@ -442,7 +442,10 @@ async function markAsRead(messageId) {
 function scrollToBottom(smooth = false) {
     const c = document.getElementById('messagesContainer');
     if (!c) return;
-    c.scrollTo({ top: c.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+    // RAF ensures layout is complete before scrolling — prevents jank
+    requestAnimationFrame(() => {
+        c.scrollTo({ top: c.scrollHeight, behavior: smooth ? 'smooth' : 'instant' });
+    });
     document.getElementById('scrollBottomBtn')?.classList.remove('show');
     const badge = document.getElementById('scrollBottomBadge');
     if (badge) { badge.classList.add('hidden'); badge.textContent = '0'; }
@@ -451,7 +454,7 @@ function scrollToBottom(smooth = false) {
 function _isAtBottom() {
     const c = document.getElementById('messagesContainer');
     if (!c) return true;
-    return c.scrollHeight - c.scrollTop - c.clientHeight < 60;
+    return c.scrollHeight - c.scrollTop - c.clientHeight < 80;
 }
 
 function _showScrollBadge(count) {
@@ -523,21 +526,24 @@ function _replaceTempMessage(tempId, serverMsg) {
 }
 
 function _updateReadTicks(otherLastRead) {
-    window.appState.messages.forEach(msg => {
-        if (!msg.is_mine || typeof msg.id !== 'number') return;
+    if (!otherLastRead) return;
+    // Only scan the most recent 50 messages — avoids O(n) DOM queries on long chats
+    const msgs = window.appState.messages;
+    const start = Math.max(0, msgs.length - 50);
+    for (let i = msgs.length - 1; i >= start; i--) {
+        const msg = msgs[i];
+        if (!msg.is_mine || typeof msg.id !== 'number') continue;
         const newStatus = msg.id <= otherLastRead ? 'read' : 'delivered';
-        if (msg.read_status !== newStatus) {
-            msg.read_status = newStatus;
-            const el = document.getElementById(`msg_${msg.id}`);
-            if (el) {
-                const tick = el.querySelector('.message-ticks');
-                if (tick) {
-                    tick.className = `message-ticks ${newStatus}`;
-                    tick.innerHTML = _tickSVG(newStatus);
-                }
-            }
+        if (msg.read_status === newStatus) continue;
+        msg.read_status = newStatus;
+        const el = document.getElementById(`msg_${msg.id}`);
+        if (!el) continue;
+        const tick = el.querySelector('.message-ticks');
+        if (tick) {
+            tick.className = `message-ticks ${newStatus}`;
+            tick.innerHTML = _tickSVG(newStatus);
         }
-    });
+    }
 }
 
 function _updateHeader(user) {
@@ -650,19 +656,28 @@ function _bindInputHandlers() {
 
 function _bindScrollHandlers() {
     const container = document.getElementById('messagesContainer');
-    container?.addEventListener('scroll', () => {
-        _lastActivity = Date.now(); // Track activity
-        
-        // Trigger lazy load when near top
-        if (container.scrollTop < 100 && !_isLoadingOlder && _hasMoreHistory) {
-            _loadOlderMessages();
-        }
+    if (!container) return;
 
-        if (_isAtBottom()) {
-            document.getElementById('scrollBottomBtn')?.classList.remove('show');
-            _markLastRead();
-        }
-    });
+    let _scrollRaf = null;
+
+    // Passive + debounced via RAF — zero jank on mobile
+    container.addEventListener('scroll', () => {
+        if (_scrollRaf) return;
+        _scrollRaf = requestAnimationFrame(() => {
+            _scrollRaf = null;
+            _lastActivity = Date.now();
+
+            if (container.scrollTop < 120 && !_isLoadingOlder && _hasMoreHistory) {
+                _loadOlderMessages();
+            }
+
+            if (_isAtBottom()) {
+                document.getElementById('scrollBottomBtn')?.classList.remove('show');
+                _markLastRead();
+            }
+        });
+    }, { passive: true });
+
     document.getElementById('scrollBottomBtn')?.addEventListener('click', () => scrollToBottom(true));
 }
 
@@ -698,18 +713,38 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ─────────────────────────────────────────
-// MOBILE KEYBOARD HANDLING (VisualViewport)
+// MOBILE KEYBOARD HANDLING (VisualViewport API)
+// Prevents input bar from being hidden behind soft keyboard.
+// Uses 100dvh where supported, falls back to VisualViewport.
 // ─────────────────────────────────────────
-if (window.visualViewport) {
-    let _vpTimeout = null;
-    window.visualViewport.addEventListener('resize', () => {
-        clearTimeout(_vpTimeout);
-        _vpTimeout = setTimeout(() => {
+(function _initKeyboardHandling() {
+    const app = document.querySelector('.chat-app');
+    if (!app) return;
+
+    // Prefer 100dvh (Chrome 108+, Safari 15.4+) — handles keyboard natively
+    const supportsDvh = CSS.supports('height', '100dvh');
+    if (supportsDvh) {
+        app.style.height = '100dvh';
+        return; // browser handles everything
+    }
+
+    // Fallback: VisualViewport API for older browsers
+    if (!window.visualViewport) return;
+
+    let _vpRaf = null;
+    const _onVpResize = () => {
+        if (_vpRaf) return;
+        _vpRaf = requestAnimationFrame(() => {
+            _vpRaf = null;
             const vh = window.visualViewport.height;
-            const app = document.querySelector('.chat-app');
-            if (app) app.style.height = vh + 'px';
-            // Keep chat scrolled to bottom when keyboard opens
+            const ot = window.visualViewport.offsetTop;
+            app.style.height  = vh + 'px';
+            app.style.top     = ot + 'px';
+            app.style.position = 'fixed';
             if (_isAtBottom()) scrollToBottom(false);
-        }, 50);
-    });
-}
+        });
+    };
+
+    window.visualViewport.addEventListener('resize', _onVpResize, { passive: true });
+    window.visualViewport.addEventListener('scroll', _onVpResize, { passive: true });
+})();

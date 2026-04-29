@@ -550,13 +550,14 @@
     flex-direction: column;
     gap: 0;
     background: var(--wallpaper-default);
-    scroll-behavior: smooth;
     position: relative;
     /* Mobile scroll performance */
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     will-change: scroll-position;
     contain: layout style;
+    /* Preserve scroll position when prepending older messages */
+    overflow-anchor: none;
 }
 
 /* ── Scroll to Bottom Button ── */
@@ -756,6 +757,16 @@
 @keyframes blink {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.3; }
+}
+
+/* Message highlight (reply-scroll target) — GPU only, no layout cost */
+@keyframes msgHighlight {
+    0%   { background-color: rgba(99, 102, 241, 0.25); }
+    100% { background-color: transparent; }
+}
+.msg-highlight {
+    animation: msgHighlight 1.2s ease-out forwards;
+    border-radius: var(--radius-lg);
 }
 
 .voice-recording-time {
