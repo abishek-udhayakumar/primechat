@@ -44,6 +44,7 @@ window.openConversation = async (conversationId, otherUser) => {
         lastMessageId: 0,
         replyingTo: null,
         isTyping: false,
+        typingUsers: new Set(),
     });
     _isLoadingOlder = false;
     _hasMoreHistory = true;
@@ -261,6 +262,30 @@ async function _poll() {
         const other_last_seen = ls;
         const other_last_read = lr;
 
+        // ── Populate appState.onlineUsers ──
+        if (window.appState.activeOtherUser) {
+            const uid = window.appState.activeOtherUser.id;
+            if (other_user_status === 'online') {
+                window.appState.onlineUsers.add(uid);
+            } else {
+                window.appState.onlineUsers.delete(uid);
+            }
+        }
+
+        // ── Populate appState.typingUsers ──
+        if (window.appState.activeOtherUser) {
+            const uid = window.appState.activeOtherUser.id;
+            if (typing) {
+                window.appState.typingUsers.add(uid);
+            } else {
+                window.appState.typingUsers.delete(uid);
+            }
+        }
+
+        // ── Emit standardized events ──
+        EventBus.emit('user:status', { status: other_user_status, lastSeen: other_last_seen });
+        EventBus.emit(typing ? 'typing:start' : 'typing:stop', { convId });
+
         if (messages.length > 0) {
             _lastMessageReceivedAt = Date.now();
         }
@@ -271,6 +296,9 @@ async function _poll() {
 
         // ── Update read-receipt ticks ──
         _updateReadTicks(other_last_read, other_user_status, other_last_seen);
+        if (other_last_read) {
+            EventBus.emit('message:read', { lastReadId: other_last_read });
+        }
 
         // ── Append genuinely new messages ──
         if (messages && messages.length > 0) {
@@ -287,8 +315,6 @@ async function _poll() {
                 if (existingIds.has(m.id)) return;
                 
                 if (m.client_msg_id && tempMessagesByClientId.has(m.client_msg_id)) {
-                    // This is a server response for our optimistic temp message!
-                    // Replace it instead of ignoring it to prevent duplicates
                     _replaceTempMessage(m.client_msg_id, m);
                 } else {
                     newMsgs.push(m);
@@ -304,6 +330,9 @@ async function _poll() {
                 // Append new DOM nodes instead of full re-render
                 window._appendMessages(newMsgs);
 
+                // ── DOM pruning: cap at 200 messages ──
+                _pruneOldMessages();
+
                 if (wasAtBottom) {
                     scrollToBottom(true);
                     _markLastRead();
@@ -311,7 +340,8 @@ async function _poll() {
                     _showScrollBadge(newMsgs.length);
                 }
 
-                // Notification sound for incoming messages
+                // Emit message:receive + notification sound
+                EventBus.emit('message:receive', { messages: newMsgs, convId });
                 if (!newMsgs[newMsgs.length - 1].is_mine) {
                     _playSound();
                 }
@@ -379,6 +409,7 @@ async function sendMessage(content = null, type = 'text') {
     window.appState.messages.push(tempMsg);
     window._appendMessages([tempMsg]);
     scrollToBottom(true);
+    EventBus.emit('message:send', { message: tempMsg });
 
     _isSending = true;
 
@@ -421,11 +452,11 @@ function notifyTyping(isTyping) {
     const convId = window.appState.activeConversationId;
     if (!convId) return;
 
-    _lastActivity = Date.now(); // Track activity
+    _lastActivity = Date.now();
 
     if (window.appState.isTyping === isTyping) return;
 
-    // Debounce typing notifications to the server
+    // Debounce typing notifications: 300ms for start, immediate for stop
     clearTimeout(_typingDebounceTimer);
     _typingDebounceTimer = setTimeout(() => {
         window.appState.isTyping = isTyping;
@@ -433,10 +464,11 @@ function notifyTyping(isTyping) {
             method: 'POST',
             body: { conversation_id: convId, is_typing: isTyping }
         }).catch(() => { });
-    }, isTyping ? 500 : 0);
+    }, isTyping ? 300 : 0);
 
     if (isTyping) {
         clearTimeout(_typingTimer);
+        // Auto-stop after 2s inactivity
         _typingTimer = setTimeout(() => notifyTyping(false), 2000);
     }
 }
@@ -534,6 +566,32 @@ function cancelReply() {
 // ─────────────────────────────────────────
 // PRIVATE HELPERS
 // ─────────────────────────────────────────
+
+const DOM_MSG_LIMIT = 200;
+
+function _pruneOldMessages() {
+    const container = document.getElementById('messagesContainer');
+    if (!container) return;
+
+    const wrappers = container.querySelectorAll('.message-wrapper');
+    if (wrappers.length <= DOM_MSG_LIMIT) return;
+
+    const excess = wrappers.length - DOM_MSG_LIMIT;
+
+    // Prune oldest DOM nodes and state in one RAF
+    requestAnimationFrame(() => {
+        for (let i = 0; i < excess; i++) {
+            wrappers[i].remove();
+        }
+    });
+
+    // Trim state array
+    if (window.appState.messages.length > DOM_MSG_LIMIT) {
+        window.appState.messages = window.appState.messages.slice(-DOM_MSG_LIMIT);
+    }
+
+    _hasMoreHistory = true; // allow re-fetch when scrolling up
+}
 
 function _lastId(msgs) {
     if (!msgs.length) return 0;

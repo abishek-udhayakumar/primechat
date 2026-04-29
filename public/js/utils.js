@@ -238,3 +238,43 @@ function _loadModule(src) {
     });
     return _moduleCache[src];
 }
+
+// ─────────────────────────────────────────
+// DEBUG LOGGER
+// Enable via: localStorage.setItem('debug', 'true')
+// ─────────────────────────────────────────
+const PrimeLog = (() => {
+    const _enabled = () => localStorage.getItem('debug') === 'true';
+
+    function event(name, data) {
+        if (!_enabled()) return;
+        console.log(`%c[Event] ${name}`, 'color: #6366f1; font-weight: bold', data || '');
+    }
+
+    function state(key, value) {
+        if (!_enabled()) return;
+        console.log(`%c[State] ${key}`, 'color: #22c55e; font-weight: bold', value);
+    }
+
+    function api(endpoint, ms, ok) {
+        if (!_enabled()) return;
+        const color = ok ? '#22c55e' : '#ef4444';
+        console.log(`%c[API] ${endpoint} (${ms}ms)`, `color: ${color}; font-weight: bold`);
+    }
+
+    function perf(label, ms) {
+        if (!_enabled()) return;
+        console.log(`%c[Perf] ${label}: ${ms.toFixed(1)}ms`, 'color: #f59e0b; font-weight: bold');
+    }
+
+    return { event, state, api, perf };
+})();
+
+window.PrimeLog = PrimeLog;
+
+// Auto-log all EventBus events when debug is enabled
+const _origEmit = EventBus.emit.bind(EventBus);
+EventBus.emit = (event, data) => {
+    PrimeLog.event(event, data);
+    _origEmit(event, data);
+};

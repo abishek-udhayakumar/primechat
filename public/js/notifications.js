@@ -166,6 +166,9 @@ const Notifier = (() => {
         // Play sound once per cycle (not per conversation)
         if (soundNeeded) _beep();
 
+        // Sync global unread count in appState
+        window.appState.unreadCount = totalUnread;
+
         _updateTitle(totalUnread);
 
         // Merge updates into appState.conversations to preserve infinite scroll
