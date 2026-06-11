@@ -62,10 +62,11 @@ if (str_starts_with($uri, '/api/')) {
 // 2. FRONTEND PAGE ROUTING — Clean URLs
 // ──────────────────────────────────────────────
 $routes = [
-    '/'        => '/views/login.html',
-    '/login'   => '/views/login.html',
-    '/signup'  => '/views/signup.html',
-    '/chat'    => '/views/chat.html',
+    '/'           => '/views/splash.html',
+    '/onboarding' => '/views/onboarding.html',
+    '/login'      => '/views/login.html',
+    '/signup'     => '/views/signup.html',
+    '/chat'       => '/views/chat.html',
 ];
 
 if (isset($routes[$uri])) {

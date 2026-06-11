@@ -288,3 +288,33 @@ button:focus-visible {
     transform: translateX(22px);
     background: #fff;
 }
+
+/* ══════════════════════════════════════
+   REDUCED MOTION — Accessibility
+   Disables non-essential animations for
+   users who prefer less motion.
+   ══════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ══════════════════════════════════════
+   MOBILE TOASTS — Bottom-center on phones
+   Thumbs naturally rest at the bottom.
+   ══════════════════════════════════════ */
+@media (max-width: 768px) {
+    .toast-container {
+        top: auto;
+        bottom: calc(var(--space-5) + var(--safe-bottom, 0px));
+        right: var(--space-3);
+        left: var(--space-3);
+        align-items: center;
+    }
+    .toast {
+        max-width: 100%;
+    }
+}

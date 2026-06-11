@@ -614,7 +614,7 @@ function _pruneOldMessages() {
     const container = document.getElementById('messagesContainer');
     if (!container) return;
 
-    const wrappers = container.querySelectorAll('.message-wrapper');
+    const wrappers = container.querySelectorAll('.message');
     if (wrappers.length <= DOM_MSG_LIMIT) return;
 
     const excess = wrappers.length - DOM_MSG_LIMIT;

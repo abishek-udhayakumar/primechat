@@ -74,19 +74,14 @@ function initApp() {
     });
 
     // ── LAZY MODULE: Theme — load on first toggle click ──
-    const _initTheme = async () => {
-        await _loadModule('/js/theme.js');
-        if (window.initTheme) window.initTheme();
-    };
-    // Apply saved theme immediately without JS (CSS data-theme handles it)
-    // Only load full theme.js when user wants to change it
     document.getElementById('themeToggleBtn')?.addEventListener('click', async () => {
-        await _initTheme();
-        document.getElementById('themeToggleBtn')?.click(); // re-fire to actual handler
-    }, { once: true });
-    document.getElementById('profileThemeToggle')?.addEventListener('click', async () => {
-        await _initTheme();
-    }, { once: true });
+        if (!window.toggleTheme) {
+            await _loadModule('/js/theme.js');
+        }
+        if (window.toggleTheme) {
+            await window.toggleTheme();
+        }
+    });
 
     // ── LAZY MODULE: Emoji picker ──
     let _emojiLoaded = false;

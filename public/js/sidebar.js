@@ -152,9 +152,10 @@ function renderConversations() {
 
     if (!conversations.length) {
         list.innerHTML = `
-            <div style="padding:32px 16px;text-align:center;color:var(--color-text-secondary);font-size:var(--fs-sm);line-height:1.8;">
-                <svg style="width:40px;height:40px;color:var(--color-text-tertiary);margin-bottom:12px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                <br>No conversations yet.<br>Search for a user to start chatting.
+            <div class="py-10 px-4 text-center text-secondary text-sm leading-relaxed flex flex-col items-center justify-center gap-1">
+                <svg class="w-10 h-10 text-tertiary mb-3 animate-orb-float" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span>No conversations yet.</span>
+                <span class="text-xs text-tertiary">Search for a contact to start chatting.</span>
             </div>`;
         return;
     }
@@ -185,7 +186,8 @@ function renderConversations() {
 
         if (existing && !orderChanged) {
             // ── DIFF UPDATE: only patch changed parts ──
-            existing.className = `conversation-item${isActive ? ' active' : ''}`;
+            const hasUnread = conv.unread_count > 0 && !isActive;
+            existing.className = `conversation-item${isActive ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
 
             // Update status dot
             const dot = existing.querySelector('.status-dot');
@@ -238,7 +240,8 @@ function _buildConversationItem(conv, isActive) {
     const lastMsg = conv.last_message;
 
     const item = document.createElement('div');
-    item.className = `conversation-item${isActive ? ' active' : ''}`;
+    const hasUnread = conv.unread_count > 0 && !isActive;
+    item.className = `conversation-item${isActive ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
     item.dataset.convId = conv.conversation_id;
     item.addEventListener('click', () => openConversation(conv.conversation_id, user));
 
@@ -300,7 +303,7 @@ function _buildConversationItem(conv, isActive) {
 
 async function performSearch(query) {
     const resultsEl = document.getElementById('searchResults');
-    resultsEl.innerHTML = `<div style="padding:20px;text-align:center"><div class="spinner spinner--md" style="margin:0 auto;display:inline-block"></div></div>`;
+    resultsEl.innerHTML = `<div class="p-6 text-center"><div class="spinner spinner--md mx-auto"></div></div>`;
     resultsEl.classList.add('show');
 
     try {

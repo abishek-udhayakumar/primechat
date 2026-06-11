@@ -2,83 +2,100 @@
 <html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-    <meta name="description" content="Create your PrimeChat account — Premium real-time messaging">
-    <title>Sign Up — PrimeChat</title>
-    <link rel="stylesheet" href="/css/variables.css">
-    <link rel="stylesheet" href="/css/base.css">
-    <link rel="stylesheet" href="/css/auth.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
+    <meta name="csrf-token" content="<?= $csrf_token ?? '' ?>">
+    <meta name="description" content="Create your PrimeChat account — Premium encrypted messaging">
+    <title>PrimeChat — Create Account</title>
+    <!-- Google Font Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
-    <div id="toastContainer" class="toast-container"></div>
-    <main class="auth-page">
-        <div class="auth-card">
-            <!-- Logo -->
-            <div class="auth-logo">
-                <div class="auth-logo-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    <div class="flex items-center justify-center min-h-[100dvh] p-4 relative overflow-hidden bg-bg-primary">
+        <!-- Auth Card -->
+        <div class="auth-card" id="authCard">
+            <!-- Header Brand Details -->
+            <div class="flex flex-col items-center mb-6">
+                <!-- V3 Minimalist Icon -->
+                <div class="w-12 h-12 rounded-xl flex items-center justify-center mb-4 bg-bg-tertiary border border-border text-accent">
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>
                     </svg>
                 </div>
-                <span class="auth-logo-text">PrimeChat</span>
+                <h1 class="text-2xl font-bold tracking-tight text-primary">Create Account</h1>
+                <p class="text-xs text-secondary mt-1 font-medium font-heading">Start chatting securely in seconds</p>
             </div>
 
-            <h1 class="auth-title">Create account</h1>
-            <p class="auth-subtitle">Start chatting in seconds</p>
+            <!-- Global Error Alerts -->
+            <div class="auth-error-banner" id="authError"></div>
 
-            <!-- Error Banner -->
-            <div id="authError" class="auth-error-banner"></div>
-
-            <form id="signupForm" class="auth-form" novalidate>
+            <!-- Form -->
+            <form id="signupForm" class="flex flex-col gap-3" novalidate>
+                <!-- Display Name Input -->
                 <div class="form-floating">
-                    <input type="text" id="display_name" name="display_name" class="form-input" placeholder=" " autocomplete="name" required>
-                    <label class="form-label" for="display_name">Full Name</label>
+                    <input type="text" id="display_name" class="form-input peer" placeholder=" " autocomplete="name" required>
+                    <label for="display_name" class="form-label">Display Name</label>
                     <div class="inline-error" id="display_nameError"></div>
                 </div>
 
+                <!-- Username Input -->
                 <div class="form-floating">
-                    <input type="text" id="username" name="username" class="form-input" placeholder=" " autocomplete="username" required minlength="3" maxlength="50">
-                    <label class="form-label" for="username">Username</label>
+                    <input type="text" id="username" class="form-input peer" placeholder=" " autocomplete="username" required>
+                    <label for="username" class="form-label">Username</label>
                     <div class="inline-error" id="usernameError"></div>
                 </div>
 
+                <!-- Email Input -->
                 <div class="form-floating">
-                    <input type="email" id="email" name="email" class="form-input" placeholder=" " autocomplete="email" required>
-                    <label class="form-label" for="email">Email</label>
+                    <input type="email" id="email" class="form-input peer" placeholder=" " autocomplete="email" required>
+                    <label for="email" class="form-label">Email Address</label>
                     <div class="inline-error" id="emailError"></div>
                 </div>
 
+                <!-- Password Input -->
                 <div class="form-floating">
-                    <input type="tel" id="phone" name="phone" class="form-input" placeholder=" " autocomplete="tel">
-                    <label class="form-label" for="phone">Phone <span style="opacity:0.5;font-weight:400;text-transform:none;">(optional)</span></label>
-                    <div class="inline-error" id="phoneError"></div>
-                </div>
-
-                <div class="form-floating">
-                    <input type="password" id="password" name="password" class="form-input" placeholder=" " autocomplete="new-password" required minlength="6">
-                    <label class="form-label" for="password">Password</label>
-                    <button type="button" class="password-toggle" id="togglePassword" aria-label="Toggle password visibility">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                    <input type="password" id="password" class="form-input peer" placeholder=" " autocomplete="new-password" required>
+                    <label for="password" class="form-label">Password</label>
+                    
+                    <button type="button" class="absolute right-3.5 top-6 -translate-y-1/2 text-tertiary hover:text-primary transition-colors p-1" id="togglePw" aria-label="Toggle password visibility">
+                        <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
+                    
                     <div class="inline-error" id="passwordError"></div>
+                    
+                    <!-- Password Strength Meter -->
+                    <div class="pw-strength" id="passwordStrength" data-strength="0">
+                        <div class="pw-segment"></div>
+                        <div class="pw-segment"></div>
+                        <div class="pw-segment"></div>
+                        <div class="pw-segment"></div>
+                    </div>
                 </div>
 
+                <!-- Action Submit Button -->
                 <button type="submit" class="auth-submit" id="signupBtn">
                     <span class="auth-btn-text" id="signupBtnText">Create Account</span>
-                    <span class="auth-btn-loading" id="signupBtnLoading">
-                        <span class="auth-spinner"></span>
-                        Creating account…
+                    <span class="auth-btn-loading hidden items-center gap-2" id="signupBtnLoading">
+                        <span class="spinner spinner--sm border-white/45 border-t-white"></span>
+                        Registering…
+                    </span>
+                    <span class="auth-btn-success hidden items-center justify-center gap-2">
+                        <svg class="w-[20px] h-[20px] animate-check-pop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                     </span>
                 </button>
             </form>
 
-            <div class="auth-link-row">
-                Already have an account? <a href="/login" class="auth-link">Sign in</a>
-            </div>
+            <!-- Navigate to Login -->
+            <p class="text-xs text-secondary text-center mt-6 font-medium">
+                Already have an account?
+                <a href="/login" class="text-accent font-semibold hover:underline transition-colors">Sign in</a>
+            </p>
         </div>
-    </main>
+    </div>
 
-    <script src="/js/utils.js" defer></script>
-    <script src="/js/auth.js" defer></script>
+    <script src="/js/utils.js"></script>
+    <script src="/js/auth.js"></script>
 </body>
 </html>

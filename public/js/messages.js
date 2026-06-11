@@ -90,13 +90,13 @@ window.renderMessages = () => {
         return;
     }
 
-    _appendMessages(window.appState.messages, container);
+    _appendMessages(window.appState.messages, container, true); // true = batch/initial
 };
 
 // ─────────────────────────────────────────
 // INCREMENTAL APPEND — new messages only
 // ─────────────────────────────────────────
-window._appendMessages = (msgs, container) => {
+window._appendMessages = (msgs, container, isBatch = false) => {
     container = container || document.getElementById('messagesContainer');
     if (!container || !msgs.length) return;
 
@@ -121,7 +121,10 @@ window._appendMessages = (msgs, container) => {
             lastSender = null;
         }
 
-        frag.appendChild(_buildBubble(msg, lastSender === msg.sender_id));
+        const bubble = _buildBubble(msg, lastSender === msg.sender_id);
+        // Disable entry animation during batch loads (prevents 50+ simultaneous animations)
+        if (isBatch) bubble.classList.add('no-anim');
+        frag.appendChild(bubble);
         lastSender = msg.sender_id;
         _domMsgCount++;
     }

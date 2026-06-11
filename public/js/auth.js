@@ -66,15 +66,29 @@ document.addEventListener('DOMContentLoaded', () => {
         if (err) { err.textContent = ''; err.classList.remove('show'); }
     };
 
-    // ── Show Success (checkmark) ──
+    // ── Show Success (checkmark via CSS class) ──
     const showSuccess = (btnId) => {
         const btn = document.getElementById(btnId);
         if (!btn) return;
         btn.classList.remove('loading');
         btn.classList.add('success');
         btn.disabled = true;
-        // Replace content with animated checkmark
-        btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" style="animation:checkDraw 0.3s ease-out forwards;stroke-dasharray:30;stroke-dashoffset:30;"></polyline></svg>';
+    };
+
+    // ── Password Strength Calculator ──
+    const calcPasswordStrength = (pw) => {
+        let score = 0;
+        if (pw.length >= 6) score++;
+        if (pw.length >= 10) score++;
+        if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+        if (/[^A-Za-z0-9]/.test(pw)) score++;
+        return Math.min(score, 4);
+    };
+
+    const updateStrengthBar = (pw) => {
+        const bar = document.getElementById('passwordStrength');
+        if (!bar) return;
+        bar.dataset.strength = pw.length > 0 ? calcPasswordStrength(pw) : '0';
     };
 
     // ==========================================
@@ -84,9 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
         // Clear errors on input
         ['identifier', 'password'].forEach(id => {
-            document.getElementById(id)?.addEventListener('input', () => {
+            document.getElementById(id)?.addEventListener('input', (e) => {
                 clearField(id);
                 hideError();
+                if (id === 'password') updateStrengthBar(e.target.value);
             });
         });
 
@@ -147,6 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const val = e.target.value.trim();
                 if (!val) { clearField(id); return; }
                 setFieldError(id, rules[id](val));
+                if (id === 'password') updateStrengthBar(e.target.value);
             }, 400));
         });
 
@@ -212,7 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // PASSWORD TOGGLE
     // ==========================================
-    const toggleBtn = document.getElementById('togglePassword');
+    const toggleBtn = document.getElementById('togglePw');
     const pwInput = document.getElementById('password');
 
     if (toggleBtn && pwInput) {

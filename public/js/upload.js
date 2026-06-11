@@ -212,7 +212,7 @@ function _uploadFileWithProgress(file, uploadType) {
     xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
             const pct = Math.round((e.loaded / e.total) * 100);
-            const wrapper = document.querySelector(`.message[data-id="${tempId}"]`);
+            const wrapper = document.querySelector(`.message[data-msg-id="${tempId}"]`);
             if (wrapper) {
                 const bar = wrapper.querySelector('.upload-progress-bar');
                 if (bar) bar.style.width = pct + '%';
@@ -223,7 +223,7 @@ function _uploadFileWithProgress(file, uploadType) {
     };
 
     // Store xhr reference for cancel
-    const cancelBtn = document.querySelector(`.message[data-id="${tempId}"] .upload-cancel-btn`);
+    const cancelBtn = document.querySelector(`.message[data-msg-id="${tempId}"] .upload-cancel-btn`);
     if (cancelBtn) {
         cancelBtn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -264,8 +264,8 @@ function _uploadFileWithProgress(file, uploadType) {
 }
 
 function _removeTempUpload(id) {
-    const el = document.querySelector(`.message[data-id="${id}"]`);
-    if (el) el.closest('.message-wrapper')?.remove();
+    const el = document.querySelector(`.message[data-msg-id="${id}"]`);
+    if (el) el.remove();
     window.appState.messages = window.appState.messages.filter(m => m.id !== id);
 }
 

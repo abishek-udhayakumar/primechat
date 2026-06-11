@@ -109,7 +109,7 @@
 .auth-form {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: var(--space-3);
 }
 
 /* ── Floating Labels ── */
@@ -353,4 +353,78 @@
     }
     .auth-logo { margin-bottom: var(--space-3); }
     .auth-subtitle { margin-bottom: var(--space-3); }
+}
+
+/* ══════════════════════════════════════
+   MOBILE-NATIVE AUTH (≤480px)
+   Card becomes the page — no border, no shadow.
+   Matches Telegram/Signal mobile auth pattern.
+   ══════════════════════════════════════ */
+@media (max-width: 480px) {
+    .auth-page::before,
+    .auth-page::after {
+        display: none; /* Remove GPU-heavy orbs on small screens */
+    }
+    .auth-card {
+        max-width: 100%;
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+        background: var(--color-bg-primary);
+        padding: var(--space-8) var(--space-5);
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+}
+
+/* ══════════════════════════════════════
+   PASSWORD STRENGTH INDICATOR
+   Driven by data-strength="0-4" on .password-strength
+   ══════════════════════════════════════ */
+.password-strength {
+    display: flex;
+    gap: 4px;
+    margin-top: var(--space-2);
+    height: 3px;
+}
+.password-strength-segment {
+    flex: 1;
+    height: 100%;
+    border-radius: var(--radius-full);
+    background: var(--color-border);
+    transition: background var(--transition-fast);
+}
+/* Strength levels */
+.password-strength[data-strength="1"] .password-strength-segment:nth-child(1) {
+    background: var(--color-danger);
+}
+.password-strength[data-strength="2"] .password-strength-segment:nth-child(-n+2) {
+    background: var(--color-warning);
+}
+.password-strength[data-strength="3"] .password-strength-segment:nth-child(-n+3) {
+    background: var(--color-info);
+}
+.password-strength[data-strength="4"] .password-strength-segment {
+    background: var(--color-success);
+}
+
+/* ══════════════════════════════════════
+   SUCCESS CHECKMARK ON SUBMIT BUTTON
+   ══════════════════════════════════════ */
+.auth-submit.success .auth-btn-text,
+.auth-submit.success .auth-btn-loading { display: none; }
+.auth-submit.success .auth-btn-success { display: flex; }
+.auth-btn-success {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+}
+.auth-btn-success svg {
+    width: 22px; height: 22px;
+    animation: checkPop 0.35s var(--transition-bounce);
+}
+@keyframes checkPop {
+    from { transform: scale(0) rotate(-45deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0deg);   opacity: 1; }
 }

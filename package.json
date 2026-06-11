@@ -1,0 +1,25 @@
+{
+  "name": "chat_app",
+  "version": "1.0.0",
+  "description": "PrimeChat is a real-time chat application built to provide smooth and reliable communication between users. This project focuses on real-time messaging, user handling, and a clean user experience.",
+  "main": "index.js",
+  "scripts": {
+    "css:build": "npx tailwindcss -i public/css/tailwind.css -o public/css/app.css --minify",
+    "css:watch": "npx tailwindcss -i public/css/tailwind.css -o public/css/app.css --watch",
+    "css:dev": "npx tailwindcss -i public/css/tailwind.css -o public/css/app.css"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abishek-udhayakumar/primechat.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abishek-udhayakumar/primechat/issues"
+  },
+  "homepage": "https://github.com/abishek-udhayakumar/primechat#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.19"
+  }
+}

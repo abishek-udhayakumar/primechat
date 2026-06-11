@@ -2,14 +2,17 @@
    PrimeChat — Messages (Bubbles, Ticks, Attachments)
    ============================================================ */
 
-/* ── Date Divider ── */
+/* ── Date Divider (sticky) ── */
 .message-date-divider {
     display: flex;
     align-items: center;
     justify-content: center;
     margin: var(--space-4) 0;
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 5;
     user-select: none;
+    padding: var(--space-1) 0;
 }
 .message-date-divider span {
     padding: 4px var(--space-3);
@@ -21,6 +24,8 @@
     color: var(--color-text-tertiary);
     letter-spacing: 0.03em;
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: var(--shadow-sm);
 }
 
 /* ── System Message ── */
@@ -55,12 +60,14 @@
     from { opacity: 0; transform: translateY(8px) scale(0.97); }
     to   { opacity: 1; transform: translateY(0)  scale(1); }
 }
+/* Disable animation during batch/initial load to prevent jank */
+.message.no-anim { animation: none; }
 
 /* ── Bubble ── */
 .message-bubble {
     max-width: min(72%, 520px);
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-bubble);
     position: relative;
     word-break: break-word;
     overflow-wrap: break-word;
@@ -73,24 +80,24 @@
     }
 }
 
-/* Sent bubble */
+/* Sent bubble — gradient for depth */
 .message.sent .message-bubble {
-    background: var(--color-bubble-sent);
+    background: linear-gradient(135deg, #6366f1, #7c3aed);
     color: var(--color-bubble-sent-text);
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    border-bottom-right-radius: var(--radius-bubble-tail);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2), 0 4px 12px rgba(99,102,241,0.15);
 }
-/* Received bubble */
+/* Received bubble — subtle inner glow */
 .message.received .message-bubble {
     background: var(--color-bubble-received);
     color: var(--color-bubble-received-text);
-    border-bottom-left-radius: 4px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    border-bottom-left-radius: var(--radius-bubble-tail);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.04);
 }
 
 /* Grouped: flatten the tail radius */
-.message.sent.grouped    .message-bubble { border-bottom-right-radius: var(--radius-lg); }
-.message.received.grouped .message-bubble { border-bottom-left-radius: var(--radius-lg); }
+.message.sent.grouped    .message-bubble { border-bottom-right-radius: var(--radius-bubble); }
+.message.received.grouped .message-bubble { border-bottom-left-radius: var(--radius-bubble); }
 
 /* ── Forwarded Label ── */
 .message-forwarded {
