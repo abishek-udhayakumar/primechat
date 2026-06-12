@@ -47,6 +47,10 @@ class Logger {
         file_put_contents($alertFile, json_encode($entry) . PHP_EOL, FILE_APPEND);
     }
 
+    public static function warning(string $message, array $context = []): void {
+        self::log('warning', $message, $context);
+    }
+
     public static function info(string $message, array $context = []): void {
         self::log('info', $message, $context);
     }
