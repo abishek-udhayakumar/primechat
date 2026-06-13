@@ -13,10 +13,11 @@
 .env.*
 !.env.example        # safe to commit a sanitised template
 
-# PHP config files that embed credentials
-config/database.php
-config/session.php
-config/app.php
+# PHP config files — these read from .env, safe to track
+# config/database.php  ← tracks env-var loading, no hardcoded secrets
+# config/app.php       ← only app constants (name, paths, limits)
+# config/session.php   ← only session cookie settings
+# .env file is the real secret — keep it ignored
 
 # Certificate / key material
 *.pem
