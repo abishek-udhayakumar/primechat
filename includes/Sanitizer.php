@@ -37,10 +37,15 @@ class Sanitizer {
     }
 
     /**
-     * Validate password strength (min 6 chars)
+     * Validate password strength.
+     * Requirements: min 12 chars, at least one uppercase, one lowercase, one digit.
      */
     public static function isValidPassword(string $password): bool {
-        return strlen($password) >= 6;
+        if (strlen($password) < 12) return false;
+        if (!preg_match('/[A-Z]/', $password)) return false;
+        if (!preg_match('/[a-z]/', $password)) return false;
+        if (!preg_match('/[0-9]/', $password)) return false;
+        return true;
     }
 
     /**

@@ -10,23 +10,11 @@
 require_once __DIR__ . '/../bootstrap.php';
 Response::requireMethod('POST');
 
+// Per-endpoint rate limiting: 30 requests per 60 seconds
+RateLimiter::checkNamed('send', 30, 60);
+
 $userId = requireAuth();
 $data   = Response::getJsonBody();
-
-// ── DEBUG: Temporary production debugging ──
-$debugLog = BASE_PATH . '/logs/send_debug.log';
-@mkdir(dirname($debugLog), 0777, true);
-$debugInfo = [
-    'time'       => date('Y-m-d H:i:s'),
-    'user_id'    => $userId,
-    'session_id' => session_id(),
-    'has_csrf'   => !empty($_SERVER['HTTP_X_CSRF_TOKEN']),
-    'conv_id'    => $data['conversation_id'] ?? null,
-    'recip_id'   => $data['recipient_id'] ?? null,
-    'content_len'=> strlen($data['content'] ?? ''),
-    'type'       => $data['type'] ?? 'text',
-];
-@file_put_contents($debugLog, json_encode($debugInfo) . "\n", FILE_APPEND);
 
 $content        = Sanitizer::trimInput($data['content'] ?? '');
 $type           = in_array($data['type'] ?? 'text', ['text', 'image', 'file', 'voice']) ? ($data['type'] ?? 'text') : 'text';
@@ -79,6 +67,26 @@ try {
         }
     }
 
+    // Send push notifications to offline participants
+    try {
+        $participants = $convModel->getParticipants($conversationId);
+        $push = new WebPushHandler();
+        foreach ($participants as $p) {
+            if ((int)$p['id'] === $userId) continue;
+            if ($p['status'] === 'offline' || $p['status'] === 'away') {
+                $senderUser = $convModel->getOtherParticipant($conversationId, (int)$p['id']);
+                $senderName = $senderUser['display_name'] ?? $senderUser['username'] ?? 'Someone';
+                $preview = mb_substr(strip_tags($content), 0, 100);
+                $push->sendToUser((int)$p['id'], $senderName, $preview, [
+                    'conversation_id' => $conversationId,
+                    'sender_id' => $userId,
+                ]);
+            }
+        }
+    } catch (\Throwable $e) {
+        Logger::warning('Push notification error: ' . $e->getMessage());
+    }
+
     Response::success([
         'message_id'      => $messageId,
         'conversation_id' => $conversationId,
@@ -86,9 +94,11 @@ try {
     ], 'Message sent');
 
 } catch (\Throwable $e) {
-    // ── DEBUG: Return real error for production diagnosis ──
-    @file_put_contents(BASE_PATH . '/logs/send_error.log',
-        date('Y-m-d H:i:s') . " | " . $e->getMessage() . " | " . $e->getFile() . ":" . $e->getLine() . "\n",
-        FILE_APPEND);
-    Response::error('SEND_DEBUG: ' . $e->getMessage() . ' at ' . basename($e->getFile()) . ':' . $e->getLine(), 500);
+    Logger::error('Send message failed', [
+        'user_id' => $userId,
+        'error'   => $e->getMessage(),
+        'file'    => $e->getFile(),
+        'line'    => $e->getLine(),
+    ]);
+    Response::error('Failed to send message', 500);
 }

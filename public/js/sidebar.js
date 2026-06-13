@@ -82,20 +82,12 @@ async function _loadConversationPage(reset = false) {
 // Remap shorthand API response to full object
 function _remapConversations(list) {
     return (list || []).map(conv => {
-        // Support both shorthand and full format
         if (conv.other_user) return conv; // already full
-        return {
+        const mapped = {
             conversation_id : conv.i,
-            type            : conv.t,
+            type            : conv.t || 'direct',
+            name            : conv.n || null,
             unread_count    : conv.uc ?? 0,
-            other_user      : {
-                id           : conv.u?.i,
-                username     : conv.u?.u,
-                display_name : conv.u?.n,
-                avatar_url   : conv.u?.a,
-                status       : conv.u?.s,
-                about        : conv.u?.ab,
-            },
             last_message    : conv.m ? {
                 content  : conv.m.c,
                 time     : conv.m.tm,
@@ -103,6 +95,20 @@ function _remapConversations(list) {
                 type     : conv.m.ty,
             } : null,
         };
+        // Only direct conversations have an other_user
+        if (conv.u) {
+            mapped.other_user = {
+                id           : conv.u.i,
+                username     : conv.u.u,
+                display_name : conv.u.n,
+                avatar_url   : conv.u.a,
+                status       : conv.u.s,
+                about        : conv.u?.ab,
+            };
+        } else {
+            mapped.other_user = null;
+        }
+        return mapped;
     });
 }
 
@@ -189,9 +195,16 @@ function renderConversations() {
             const hasUnread = conv.unread_count > 0 && !isActive;
             existing.className = `conversation-item${isActive ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
 
-            // Update status dot
+            // Update name (display_name for direct, name for group)
+            const nameEl = existing.querySelector('.conversation-item-name');
+            if (nameEl) {
+                const displayName = conv.type === 'group' ? (conv.name || 'Group') : (user?.display_name || 'Unknown');
+                nameEl.textContent = displayName;
+            }
+
+            // Update status dot (only for direct chats)
             const dot = existing.querySelector('.status-dot');
-            if (dot) dot.className = `status-dot${user.status === 'online' ? ' online' : ''}`;
+            if (dot) dot.className = `status-dot${conv.type !== 'group' && user?.status === 'online' ? ' online' : ''}`;
 
             // Update time
             const time = existing.querySelector('.conversation-item-time');
@@ -233,35 +246,47 @@ function renderConversations() {
     // Remove items no longer in the list
     Object.values(existingItems).forEach(el => el.remove());
 }
-
 /** Build a single conversation item DOM node */
 function _buildConversationItem(conv, isActive) {
     const user    = conv.other_user;
     const lastMsg = conv.last_message;
+    const isGroup = conv.type === 'group';
 
     const item = document.createElement('div');
     const hasUnread = conv.unread_count > 0 && !isActive;
     item.className = `conversation-item${isActive ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
     item.dataset.convId = conv.conversation_id;
-    item.addEventListener('click', () => openConversation(conv.conversation_id, user));
+
+    if (isGroup) {
+        item.addEventListener('click', () => openConversation(conv.conversation_id, { isGroup: true, name: conv.name, conversation_id: conv.conversation_id }));
+    } else if (user) {
+        item.addEventListener('click', () => openConversation(conv.conversation_id, user));
+    }
 
     // Avatar with status dot
     const avatarWrap = document.createElement('div');
     avatarWrap.className = 'avatar-wrapper';
-    avatarWrap.innerHTML = createAvatar(user, 'avatar--md');
-    const dot = document.createElement('div');
-    dot.className = `status-dot${user.status === 'online' ? ' online' : ''}`;
-    avatarWrap.appendChild(dot);
+    if (isGroup) {
+        avatarWrap.innerHTML = `<div class="avatar avatar--md avatar--group">${conv.name ? getInitials(conv.name) : 'G'}</div>`;
+    } else {
+        avatarWrap.innerHTML = createAvatar(user || { display_name: '?' }, 'avatar--md');
+    }
+    if (!isGroup) {
+        const dot = document.createElement('div');
+        dot.className = `status-dot${user?.status === 'online' ? ' online' : ''}`;
+        avatarWrap.appendChild(dot);
+    }
 
     // Content
     const content = document.createElement('div');
     content.className = 'conversation-item-content';
 
     // Top row: name + time
+    const displayName = isGroup ? (conv.name || 'Group') : (user?.display_name || 'Unknown');
     const top = document.createElement('div');
     top.className = 'conversation-item-top';
     top.innerHTML = `
-        <div class="conversation-item-name">${escapeHTML(user.display_name)}</div>
+        <div class="conversation-item-name">${escapeHTML(displayName)}</div>
         <div class="conversation-item-time">${formatTime(lastMsg?.time)}</div>`;
 
     // Bottom row: preview + badge
@@ -293,14 +318,15 @@ function _buildConversationItem(conv, isActive) {
 
     bottom.appendChild(preview);
     bottom.appendChild(badgeWrap);
+
     content.appendChild(top);
     content.appendChild(bottom);
+
     item.appendChild(avatarWrap);
     item.appendChild(content);
 
     return item;
 }
-
 async function performSearch(query) {
     const resultsEl = document.getElementById('searchResults');
     resultsEl.innerHTML = `<div class="p-6 text-center"><div class="spinner spinner--md mx-auto"></div></div>`;

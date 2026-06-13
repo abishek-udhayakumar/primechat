@@ -159,6 +159,10 @@
     border-color: var(--color-accent);
     background: var(--color-bg-elevated);
     box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    outline: none;
+}
+.form-input:focus-visible {
+    outline: none;
 }
 .form-input.error {
     border-color: var(--color-danger);
@@ -169,7 +173,7 @@
 }
 
 /* ── Password Toggle ── */
-.password-toggle {
+.pw-toggle {
     position: absolute;
     right: 12px;
     top: 50%;
@@ -182,13 +186,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color 0.15s ease;
+    transition: color 0.15s ease, transform 0.15s ease;
     -webkit-tap-highlight-color: transparent;
     min-width: 44px;
     min-height: 44px;
+    border-radius: var(--radius-sm);
 }
-.password-toggle:hover { color: var(--color-text-primary); }
-.password-toggle svg { width: 20px; height: 20px; }
+.pw-toggle:hover { 
+    color: var(--color-text-primary); 
+    transform: translateY(-50%) scale(1.1);
+}
+.pw-toggle:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+.pw-toggle svg { width: 20px; height: 20px; }
 
 /* ── Inline Errors ── */
 .inline-error {
@@ -219,7 +231,7 @@
     border: none;
     cursor: pointer;
     width: 100%;
-    margin-top: var(--space-3);
+    margin-top: var(--space-4);
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 4px 16px rgba(99,102,241,0.35);
     transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
@@ -229,19 +241,24 @@
     min-height: 50px;
 }
 .auth-submit:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 22px rgba(99,102,241,0.5);
-    filter: brightness(1.06);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(99,102,241,0.5);
+    filter: brightness(1.08);
 }
 .auth-submit:active:not(:disabled) {
     transform: translateY(0) scale(0.98);
     transition-duration: 0.08s;
+    box-shadow: 0 2px 8px rgba(99,102,241,0.3);
 }
 .auth-submit:disabled {
-    opacity: 0.75;
+    opacity: 0.6;
     cursor: not-allowed;
     transform: none;
     filter: none;
+}
+.auth-submit:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
 }
 
 /* ── Button States (idle / loading / success) ── */
@@ -284,7 +301,7 @@
 /* ── Link Row ── */
 .auth-link-row {
     text-align: center;
-    margin-top: var(--space-5);
+    margin-top: var(--space-6);
     font-size: var(--fs-sm);
     color: var(--color-text-secondary);
 }
@@ -293,11 +310,17 @@
     font-weight: var(--fw-semibold);
     cursor: pointer;
     text-decoration: none;
-    transition: color 0.15s ease;
+    transition: color 0.15s ease, text-decoration 0.15s ease;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
 }
 .auth-link:hover {
     color: var(--color-accent-hover);
     text-decoration: underline;
+}
+.auth-link:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
 }
 
 /* ── Error Banner ── */
@@ -379,15 +402,15 @@
 
 /* ══════════════════════════════════════
    PASSWORD STRENGTH INDICATOR
-   Driven by data-strength="0-4" on .password-strength
+   Driven by data-strength="0-4" on .pw-strength
    ══════════════════════════════════════ */
-.password-strength {
+.pw-strength {
     display: flex;
     gap: 4px;
     margin-top: var(--space-2);
     height: 3px;
 }
-.password-strength-segment {
+.pw-segment {
     flex: 1;
     height: 100%;
     border-radius: var(--radius-full);
@@ -395,16 +418,16 @@
     transition: background var(--transition-fast);
 }
 /* Strength levels */
-.password-strength[data-strength="1"] .password-strength-segment:nth-child(1) {
+.pw-strength[data-strength="1"] .pw-segment:nth-child(1) {
     background: var(--color-danger);
 }
-.password-strength[data-strength="2"] .password-strength-segment:nth-child(-n+2) {
+.pw-strength[data-strength="2"] .pw-segment:nth-child(-n+2) {
     background: var(--color-warning);
 }
-.password-strength[data-strength="3"] .password-strength-segment:nth-child(-n+3) {
+.pw-strength[data-strength="3"] .pw-segment:nth-child(-n+3) {
     background: var(--color-info);
 }
-.password-strength[data-strength="4"] .password-strength-segment {
+.pw-strength[data-strength="4"] .pw-segment {
     background: var(--color-success);
 }
 

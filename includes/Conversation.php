@@ -12,30 +12,27 @@ class Conversation {
     }
 
     /**
-     * Get or create a direct conversation between two users
+     * Get or create a direct conversation between two users.
+     * Uses direct_conversation_lookup table for race-free creation.
      */
     public function getOrCreateDirect(int $userId1, int $userId2): int {
-        // Check if conversation already exists
+        // Ensure consistent ordering for unique constraint
+        if ($userId1 > $userId2) {
+            [$userId1, $userId2] = [$userId2, $userId1];
+        }
+
+        // Try to find existing conversation
         $stmt = $this->db->query(
-            "SELECT cp1.conversation_id
-             FROM conversation_participants cp1
-             INNER JOIN conversation_participants cp2
-                ON cp1.conversation_id = cp2.conversation_id
-             INNER JOIN conversations c
-                ON c.id = cp1.conversation_id
-             WHERE cp1.user_id = ?
-               AND cp2.user_id = ?
-               AND c.type = 'direct'
-             LIMIT 1",
+            "SELECT conversation_id FROM direct_conversation_lookup
+             WHERE user1_id = ? AND user2_id = ?",
             [$userId1, $userId2]
         );
-
         $result = $stmt->fetch();
         if ($result) {
             return (int) $result['conversation_id'];
         }
 
-        // Create new conversation
+        // Atomic insert with rollback on duplicate (race condition protection)
         $this->db->beginTransaction();
         try {
             $this->db->query(
@@ -43,16 +40,32 @@ class Conversation {
             );
             $convId = (int) $this->db->lastInsertId();
 
-            // Add both participants
             $this->db->query(
                 "INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?), (?, ?)",
                 [$convId, $userId1, $convId, $userId2]
             );
 
+            $this->db->query(
+                "INSERT INTO direct_conversation_lookup (user1_id, user2_id, conversation_id) VALUES (?, ?, ?)",
+                [$userId1, $userId2, $convId]
+            );
+
             $this->db->commit();
             return $convId;
         } catch (\Exception $e) {
-            $this->db->rollback();
+            $this->db->rollBack();
+            // If duplicate key error, another request won the race — fetch the existing one
+            if (str_contains($e->getMessage(), 'Duplicate')) {
+                $stmt = $this->db->query(
+                    "SELECT conversation_id FROM direct_conversation_lookup
+                     WHERE user1_id = ? AND user2_id = ?",
+                    [$userId1, $userId2]
+                );
+                $result = $stmt->fetch();
+                if ($result) {
+                    return (int) $result['conversation_id'];
+                }
+            }
             throw $e;
         }
     }
@@ -70,6 +83,7 @@ class Conversation {
             "SELECT
                 c.id AS conversation_id,
                 c.type,
+                c.name AS conversation_name,
                 c.updated_at,
                 cp.unread_count,
                 cp.last_read_message_id,
@@ -80,7 +94,7 @@ class Conversation {
                 other_user.avatar_url AS other_avatar_url,
                 other_user.status AS other_status,
                 other_user.last_seen AS other_last_seen,
-                -- Last message
+                -- Last message (denormalized via conversations.last_message_id)
                 last_msg.id AS last_message_id,
                 last_msg.content AS last_message_content,
                 last_msg.type AS last_message_type,
@@ -95,22 +109,14 @@ class Conversation {
                 ON cp2.conversation_id = c.id AND cp2.user_id != ?
              LEFT JOIN users other_user
                 ON other_user.id = cp2.user_id
-             -- Get last message (subquery for performance)
-             LEFT JOIN (
-                SELECT m1.*
-                FROM messages m1
-                INNER JOIN (
-                    SELECT conversation_id, MAX(id) AS max_id
-                    FROM messages
-                    GROUP BY conversation_id
-                ) m2 ON m1.conversation_id = m2.conversation_id AND m1.id = m2.max_id
-             ) last_msg ON last_msg.conversation_id = c.id
+             -- Get last message via denormalized column
+             LEFT JOIN messages last_msg ON last_msg.id = c.last_message_id
              -- Exclude conversations with no messages
-             WHERE last_msg.id IS NOT NULL
+             WHERE c.last_message_id IS NOT NULL
              -- Exclude messages deleted for this user
              AND NOT EXISTS (
                 SELECT 1 FROM message_deletions md
-                WHERE md.message_id = last_msg.id AND md.user_id = ?
+                WHERE md.message_id = c.last_message_id AND md.user_id = ?
              )
              ORDER BY last_msg.created_at DESC
              LIMIT {$limit} OFFSET {$offset}",

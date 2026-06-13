@@ -1,5 +1,6 @@
 /**
- * PrimeChat — Main App State & Initialization
+ * PrimeChat V3 — Main App State & Initialization
+ * Advanced Engineering: Offline-first, smart search, analytics, scheduled messages
  */
 
 // Global State — single source of truth
@@ -17,8 +18,38 @@ window.appState = {
     unreadCount: 0,
     theme: 'dark',
     wallpaper: 'default',
-    replyingTo: null
+    replyingTo: null,
+    // V3 extensions
+    offlineQueue:     [],
+    scheduledCount:   0,
+    searchIndexBuilt: false,
+    activityType:     'idle', // 'idle'|'typing'|'recording'|'uploading'
 };
+
+// ── Service Worker Registration ──
+(async () => {
+    if (!('serviceWorker' in navigator)) return;
+    try {
+        const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        console.log('[SW] Registered:', reg.scope);
+
+        // Handle SW updates — notify user to refresh
+        reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    showToast('App updated! Refresh for the latest version.', 'info');
+                }
+            });
+        });
+
+        if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+    } catch (e) {
+        console.warn('[SW] Registration failed:', e.message);
+    }
+})();
 
 document.addEventListener('DOMContentLoaded', async () => {
     // Check authentication
@@ -91,9 +122,9 @@ function initApp() {
             await _loadModule('/js/emoji.js');
             if (window.initEmoji) window.initEmoji();
             _emojiLoaded = true;
-            // Now re-fire so the actual emoji handler runs
-            document.getElementById('emojiBtn')?.click();
+            // Let initEmoji handle its own open on first call
         }
+        // If already loaded, emoji.js's own listener handles it
     });
 
     // ── LAZY MODULE: Upload (file attach + drag-drop) ──
@@ -108,8 +139,10 @@ function initApp() {
         if (!_uploadLoaded) {
             e.stopImmediatePropagation();
             await _ensureUpload();
-            document.getElementById('attachBtn')?.click();
+            // After init, trigger file input directly
+            document.getElementById('fileInput')?.click();
         }
+        // If already loaded, upload.js's own listener handles it
     });
     // Also lazy-load on drag-over the entire app
     document.querySelector('.chat-app')?.addEventListener('dragover', () => _ensureUpload(), { once: true, passive: true });
@@ -122,9 +155,9 @@ function initApp() {
             await _loadModule('/js/voice.js');
             if (window.initVoice) window.initVoice();
             _voiceLoaded = true;
-            // Re-fire so the actual handler runs  
-            document.getElementById('voiceBtn')?.click();
+            // Let initVoice handle its own start on first call
         }
+        // If already loaded, voice.js's own listener handles it
     });
 
     // ── LAZY MODULE: Profile panel ──
@@ -135,12 +168,13 @@ function initApp() {
             await _loadModule('/js/profile.js');
             if (window.initProfile) window.initProfile();
             _profileLoaded = true;
-            document.getElementById('sidebarProfileTrigger')?.click();
+            // After init, open directly rather than re-clicking
+            if (window.openProfile) window.openProfile();
         }
+        // If already loaded, profile.js's own listener handles it
     });
 
     // ── Image lazy loading via IntersectionObserver ──
-    // Observes images in the messages container and sets src only when visible
     if ('IntersectionObserver' in window) {
         const _imgObserver = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
@@ -153,10 +187,66 @@ function initApp() {
                 _imgObserver.unobserve(img);
             });
         }, { rootMargin: '200px 0px', threshold: 0 });
-
-        // Expose globally so messages.js can use it
         window._imgObserver = _imgObserver;
     }
+
+    // ── V3: Offline Queue ── (load immediately — needed before first message)
+    _loadModule('/js/offline.js').then(() => {
+        if (window.OfflineQueue) window.OfflineQueue.init();
+    });
+
+    // ── V3: Smart Search ──
+    _loadModule('/js/search.js').then(() => {
+        if (window.SmartSearch) window.SmartSearch.init();
+    });
+
+    // ── V3: Edit History ── (lazy on first edit history view)
+    let _historyLoaded = false;
+    window._ensureHistory = async () => {
+        if (_historyLoaded) return;
+        await _loadModule('/js/history.js');
+        _historyLoaded = true;
+    };
+
+    // ── V3: Analytics ──
+    let _analyticsLoaded = false;
+    document.getElementById('analyticsBtn')?.addEventListener('click', async () => {
+        if (!_analyticsLoaded) {
+            await _loadModule('/js/analytics.js');
+            _analyticsLoaded = true;
+        }
+        if (window.Analytics) window.Analytics.show();
+    });
+
+    // ── V3: Scheduler ──
+    let _schedulerLoaded = false;
+    const _ensureScheduler = async () => {
+        if (_schedulerLoaded) return;
+        await _loadModule('/js/scheduler.js');
+        if (window.Scheduler) { window.Scheduler.init(); }
+        _schedulerLoaded = true;
+    };
+
+    document.getElementById('scheduleBtn')?.addEventListener('click', async () => {
+        await _ensureScheduler();
+        const content = document.getElementById('messageInput')?.value?.trim() || '';
+        if (window.Scheduler) window.Scheduler.showComposer(content);
+    });
+
+    document.getElementById('scheduledListBtn')?.addEventListener('click', async () => {
+        await _ensureScheduler();
+        if (window.Scheduler) window.Scheduler.showList();
+    });
+
+    // ── V3: Session Management ── (opened from profile panel)
+    window._loadSessionManager = async () => {
+        // Sessions UI is handled by profile.js
+        if (!window.openProfile) {
+            await _loadModule('/js/profile.js');
+            if (window.initProfile) window.initProfile();
+        }
+        if (window.openProfile) window.openProfile('sessions');
+    };
 }
 
 function applyThemeAndWallpaper(user) {

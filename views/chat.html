@@ -1,318 +1,533 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-    <meta name="description" content="PrimeChat — Premium real-time communication platform">
-    <title>PrimeChat</title>
-    <!-- Google Font Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/app.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+  <meta name="csrf-token" content="<?= $csrf_token ?? '' ?>">
+  <meta name="description" content="PrimeChat — Premium real-time messaging">
+  <title>PrimeChat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/v3-features.css">
 </head>
 <body>
-    <div id="toastContainer" class="toast-container"></div>
-    <div class="chat-app relative pb-safe pt-safe">
-        
-        <!-- Sidebar -->
-        <aside class="sidebar hidden-mobile" id="sidebar">
-            <header class="sidebar-header">
-                <div class="sidebar-header-left" id="sidebarProfileTrigger">
-                    <div class="avatar avatar--md shrink-0 shadow-sm" id="currentUserAvatar"></div>
-                    <div class="sidebar-user-name" id="currentUserName">Loading...</div>
-                </div>
-                <div class="sidebar-header-actions">
-                    <button class="btn btn--icon btn--ghost" id="newChatBtn" title="New Chat" aria-label="New Chat">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 5v14M5 12h14"/></svg>
-                    </button>
-                    <button class="btn btn--icon btn--ghost" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle Theme">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-                    </button>
-                </div>
-            </header>
+  <!-- Toast notifications -->
+  <div id="toastContainer" class="toast-container"></div>
 
-            <!-- Sidebar Search -->
-            <div class="search-container">
-                <div class="search-input-wrapper">
-                    <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    <input type="text" id="searchInput" class="search-input" placeholder="Search contacts by name or username...">
-                    <div class="search-clear" id="searchClear">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </div>
-                </div>
+  <!-- Root layout -->
+  <div class="chat-app">
+
+    <!-- ═══════════════════════════════════
+         SIDEBAR
+         ═══════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Header -->
+      <header class="sidebar-header">
+        <div class="sidebar-header-left" id="sidebarProfileTrigger" role="button" aria-label="Open profile settings" tabindex="0">
+          <div class="avatar-wrapper">
+            <div class="avatar avatar--md" id="currentUserAvatar"></div>
+            <div class="status-dot online" id="selfStatusDot"></div>
+          </div>
+          <span class="sidebar-user-name" id="currentUserName">Loading…</span>
+        </div>
+
+        <div class="sidebar-header-actions">
+          <button class="icon-btn" id="newChatBtn" title="New Chat" aria-label="Start new chat">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button class="icon-btn" id="themeToggleBtn" title="Toggle Theme" aria-label="Toggle dark/light theme">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Search -->
+      <div class="search-container">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="searchInput" class="search-input" placeholder="Search people…" autocomplete="off" aria-label="Search conversations">
+          <div class="search-clear" id="searchClear" role="button" aria-label="Clear search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conversations -->
+      <div class="conversation-list" id="conversationList" role="list" aria-label="Conversations">
+        <!-- Skeletons while loading -->
+        <div class="conv-skeleton">
+          <div class="skel-avatar"></div>
+          <div class="skel-lines"><div class="skel-line skel-line--name"></div><div class="skel-line skel-line--preview"></div></div>
+        </div>
+        <div class="conv-skeleton">
+          <div class="skel-avatar"></div>
+          <div class="skel-lines"><div class="skel-line skel-line--name"></div><div class="skel-line skel-line--preview"></div></div>
+        </div>
+        <div class="conv-skeleton">
+          <div class="skel-avatar"></div>
+          <div class="skel-lines"><div class="skel-line skel-line--name"></div><div class="skel-line skel-line--preview"></div></div>
+        </div>
+        <div class="conv-skeleton">
+          <div class="skel-avatar"></div>
+          <div class="skel-lines"><div class="skel-line skel-line--name"></div><div class="skel-line skel-line--preview"></div></div>
+        </div>
+      </div>
+
+      <!-- Search results overlay (shown when searching) -->
+      <div class="search-results" id="searchResults" role="listbox" aria-label="Search results"></div>
+
+      <!-- ─────────────────────────────────────────────
+           PROFILE PANEL (slides in from left over sidebar)
+           ───────────────────────────────────────────── -->
+      <div class="profile-panel" id="profilePanel" role="dialog" aria-label="Profile settings" aria-modal="true">
+        <header class="profile-panel-header">
+          <button class="icon-btn" id="closeProfileBtn" aria-label="Close settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
+          <h3>Settings</h3>
+        </header>
+
+        <div class="profile-panel-body">
+          <!-- Avatar -->
+          <div class="profile-avatar-section">
+            <label class="profile-avatar-wrapper" id="profileAvatarWrapper" title="Change avatar" aria-label="Upload new avatar">
+              <div class="avatar avatar--xl" id="profileAvatar"></div>
+              <div class="profile-avatar-overlay">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              </div>
+              <input type="file" id="avatarInput" class="hidden" accept="image/*" aria-hidden="true">
+            </label>
+          </div>
+
+          <!-- Display Name -->
+          <div class="profile-card" id="profileDisplayNameField">
+            <div class="profile-field-label">Display Name</div>
+            <div class="profile-field-content">
+              <div class="profile-field-value" id="profileDisplayName" aria-label="Display name"></div>
+              <button class="icon-btn edit-field-btn" data-target="DisplayName" aria-label="Edit display name" style="width:28px;height:28px;border-radius:8px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- About -->
+          <div class="profile-card" id="profileAboutField">
+            <div class="profile-field-label">About</div>
+            <div class="profile-field-content">
+              <div class="profile-field-value" id="profileAbout" aria-label="About status"></div>
+              <button class="icon-btn edit-field-btn" data-target="About" aria-label="Edit about status" style="width:28px;height:28px;border-radius:8px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Appearance -->
+          <div class="profile-card">
+            <div class="profile-field-label">Appearance</div>
+            <button class="btn btn--secondary btn--full" id="profileThemeToggle" aria-label="Toggle theme" style="margin-top:8px;font-size:13px;height:38px;gap:8px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+              Toggle Theme
+            </button>
+          </div>
+
+          <!-- Wallpaper -->
+          <div class="profile-card">
+            <div class="profile-field-label">Chat Wallpaper</div>
+            <div class="wallpaper-grid">
+              <div class="wallpaper-option active" style="background:#08080d;border:1px solid rgba(255,255,255,0.1);" data-bg="default" role="radio" aria-label="Default wallpaper" aria-checked="true"></div>
+              <div class="wallpaper-option" style="background:linear-gradient(135deg,#0a0a14,#10101e);" data-bg="deep" role="radio" aria-label="Deep wallpaper" aria-checked="false"></div>
+              <div class="wallpaper-option" style="background:linear-gradient(135deg,#0d1117,#0d1b2a);" data-bg="ocean" role="radio" aria-label="Ocean wallpaper" aria-checked="false"></div>
+            </div>
+          </div>
+
+          <!-- Sign Out -->
+          <button class="btn btn--secondary btn--full" id="logoutBtn" aria-label="Sign out" style="font-size:13.5px;height:42px;border-color:rgba(248,113,113,0.15);color:#f87171;gap:8px;margin-top:4px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ═══════════════════════════════════
+         MAIN CHAT PANEL
+         ═══════════════════════════════════ -->
+    <main class="chat-main" id="chatMain">
+
+      <!-- Empty / welcome state -->
+      <div class="chat-empty" id="chatEmpty">
+        <div class="chat-empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h2>Select a conversation</h2>
+        <p>Pick someone from the left, or use the search to find a new person to chat with.</p>
+      </div>
+
+      <!-- Active conversation (hidden until opened) -->
+      <div id="activeChatView" class="hidden">
+
+        <!-- Chat header -->
+        <header class="chat-header" id="chatHeader">
+          <div class="chat-header-left">
+            <button class="icon-btn chat-header-back" id="backToSidebarBtn" aria-label="Back to conversations">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            </button>
+            <div class="avatar-wrapper">
+              <div class="avatar avatar--md" id="chatHeaderAvatar"></div>
+              <div class="status-dot" id="chatHeaderStatusDot"></div>
+            </div>
+            <div class="chat-header-info">
+              <div class="chat-header-name" id="chatHeaderName">User</div>
+              <div class="chat-header-status" id="chatHeaderStatus">offline</div>
+            </div>
+          </div>
+          <div class="chat-header-actions">
+            <button class="icon-btn" id="msgSearchToggleBtn" aria-label="Search messages" title="Search in conversation">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            </button>
+            <button class="icon-btn" id="analyticsBtn" aria-label="Conversation analytics" title="Analytics">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </button>
+            <button class="icon-btn" id="scheduledListBtn" aria-label="Scheduled messages" title="Scheduled messages" style="position:relative;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span class="badge hidden" id="scheduleBadge" style="position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;font-size:9px;">0</span>
+            </button>
+            <button class="icon-btn" id="chatInfoBtn" aria-label="Contact info" title="Contact info">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <!-- Message search bar -->
+        <div class="msg-search-bar" id="msgSearchBar" style="display:none;" role="search">
+          <div class="msg-search-input-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="msgSearchInput" class="search-input" placeholder="Search in conversation…" aria-label="Search messages">
+            <button class="icon-btn" id="msgSearchCloseBtn" aria-label="Close message search" style="width:28px;height:28px;border-radius:8px;flex-shrink:0;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="msg-search-results" id="msgSearchResults" style="display:none;" role="listbox"></div>
+        </div>
+
+        <!-- Messages feed -->
+        <div class="messages-container" id="messagesContainer" role="log" aria-live="polite" aria-relevant="additions"></div>
+
+        <!-- Scroll-to-bottom FAB -->
+        <button class="scroll-bottom-btn" id="scrollBottomBtn" aria-label="Scroll to latest messages">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          <div class="badge hidden" id="scrollBottomBadge" aria-label="New messages">0</div>
+        </button>
+
+        <!-- Reply preview — premium slide-up bar -->
+        <div class="reply-preview" id="replyPreview" role="status" aria-label="Replying to message">
+          <div class="reply-preview-accent"></div>
+          <div class="reply-preview-content">
+            <div class="reply-preview-name" id="replyPreviewName">Name</div>
+            <div class="reply-preview-text" id="replyPreviewText">Message text</div>
+          </div>
+          <button class="composer-icon-btn" id="cancelReplyBtn" aria-label="Cancel reply" style="width:32px;height:32px;color:var(--ink-faint);margin-left:auto;flex-shrink:0;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- ═══════════════════════════════════════
+             COMPOSER
+             ═══════════════════════════════════════ -->
+        <div class="chat-input-area" role="form" aria-label="Message composer">
+
+          <!-- ── Pill (emoji + attach + textarea) ── -->
+          <div class="composer-pill">
+
+            <!-- Left actions: emoji + attach toggle -->
+            <div class="composer-actions-left">
+              <!-- Attach toggle opens the tray -->
+              <button class="composer-icon-btn" id="attachTrayBtn" aria-label="Attach file or media" title="Attach">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+              </button>
+              <!-- Emoji -->
+              <button class="composer-icon-btn" id="emojiBtn" aria-label="Choose emoji" title="Emoji">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+                  <line x1="9" y1="9" x2="9.01" y2="9"/>
+                  <line x1="15" y1="9" x2="15.01" y2="9"/>
+                </svg>
+              </button>
             </div>
 
-            <!-- Conversation List -->
-            <div class="conversation-list" id="conversationList">
-                <!-- Skeletons shown until loaded -->
-                <div class="conv-skeleton">
-                    <div class="skel-avatar"></div>
-                    <div class="skel-lines">
-                        <div class="skel-line skel-line--name"></div>
-                        <div class="skel-line skel-line--preview"></div>
-                    </div>
-                </div>
-                <div class="conv-skeleton">
-                    <div class="skel-avatar"></div>
-                    <div class="skel-lines">
-                        <div class="skel-line skel-line--name"></div>
-                        <div class="skel-line skel-line--preview"></div>
-                    </div>
-                </div>
-                <div class="conv-skeleton">
-                    <div class="skel-avatar"></div>
-                    <div class="skel-lines">
-                        <div class="skel-line skel-line--name"></div>
-                        <div class="skel-line skel-line--preview"></div>
-                    </div>
-                </div>
+            <!-- Textarea -->
+            <div class="chat-input-wrapper">
+              <textarea
+                id="messageInput"
+                class="chat-input"
+                placeholder="Message…"
+                rows="1"
+                aria-label="Type a message"
+                aria-multiline="true"
+                autocomplete="off"
+                autocorrect="on"
+                spellcheck="true"
+                enterkeyhint="send"
+              ></textarea>
             </div>
 
-            <!-- Contacts/Search Results Overlay -->
-            <div class="search-results" id="searchResults"></div>
-
-            <!-- Profile Settings Panel slide-out -->
-            <div class="profile-panel" id="profilePanel">
-                <header class="profile-panel-header">
-                    <button class="btn btn--icon btn--ghost" id="closeProfileBtn" aria-label="Close Profile">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-                    </button>
-                    <h3>Profile Settings</h3>
-                </header>
-                <div class="profile-panel-body">
-                    <div class="profile-avatar-section">
-                        <div class="profile-avatar-wrapper" id="profileAvatarWrapper" title="Upload New Avatar">
-                            <div class="avatar avatar--xl" id="profileAvatar"></div>
-                            <div class="profile-avatar-overlay">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                            </div>
-                            <input type="file" id="avatarInput" class="hidden" accept="image/*">
-                        </div>
-                    </div>
-                    
-                    <div class="profile-field" id="profileDisplayNameField">
-                        <div class="profile-field-label">Display Name</div>
-                        <div class="profile-field-content">
-                            <div class="profile-field-value" id="profileDisplayName"></div>
-                            <button class="btn btn--icon btn--ghost edit-field-btn" data-target="DisplayName" title="Edit Display Name" aria-label="Edit Display Name">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="profile-field" id="profileAboutField">
-                        <div class="profile-field-label">About Status</div>
-                        <div class="profile-field-content">
-                            <div class="profile-field-value" id="profileAbout"></div>
-                            <button class="btn btn--icon btn--ghost edit-field-btn" data-target="About" title="Edit About Status" aria-label="Edit About Status">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="profile-field">
-                        <div class="profile-field-label">Appearance Theme</div>
-                        <div style="margin-top: 8px;">
-                            <div class="flex items-center gap-3">
-                                <button class="btn btn--secondary flex-1 py-2 text-xs" id="profileThemeToggle">
-                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                                    Switch Theme
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="profile-field">
-                        <div class="profile-field-label">Chat Wallpaper</div>
-                        <div class="wallpaper-grid">
-                            <div class="wallpaper-option wallpaper-default active" data-bg="default"></div>
-                            <div class="wallpaper-option" style="background: #10101e" data-bg="solid1"></div>
-                            <div class="wallpaper-option" style="background: linear-gradient(135deg, #10101e, #262645)" data-bg="gradient1"></div>
-                        </div>
-                    </div>
-
-                    <button class="btn btn--secondary btn--full mt-6 flex items-center justify-center text-red-500 hover:bg-red-500/10 hover:border-red-500/30 transition-colors" id="logoutBtn">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 mr-2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
-                        Log Out
-                    </button>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Chat Area -->
-        <main class="chat-main" id="chatMain">
-            <!-- Empty State -->
-            <div class="chat-empty" id="chatEmpty">
-                <div class="chat-empty-icon shadow-md">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                </div>
-                <h2 class="text-2xl font-bold font-heading">Start Communicating</h2>
-                <p>Choose an active chat from the contact list or search to begin a secure message exchange.</p>
+            <!-- Voice recording overlay (shows when recording, hides textarea) -->
+            <div class="voice-recording-bar" id="voiceRecordingBar" role="status" aria-label="Recording voice message" aria-hidden="true">
+              <div class="voice-recording-indicator"></div>
+              <div class="voice-recording-time" id="voiceRecordingTime" aria-live="off">00:00</div>
+              <div style="flex:1;"></div>
+              <button class="voice-recording-cancel" id="voiceRecordingCancel" aria-label="Cancel recording">Cancel</button>
             </div>
 
-            <!-- Active Conversation Feed -->
-            <div id="activeChatView" class="hidden flex flex-col h-full w-full">
-                <header class="chat-header shadow-sm" id="chatHeader">
-                    <div class="chat-header-left">
-                        <button class="btn btn--icon btn--ghost chat-header-back" id="backToSidebarBtn" aria-label="Back to conversations">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
-                        </button>
-                        <div class="avatar avatar--md shrink-0 shadow-sm" id="chatHeaderAvatar"></div>
-                        <div class="chat-header-info">
-                            <div class="chat-header-name" id="chatHeaderName">User</div>
-                            <div class="chat-header-status" id="chatHeaderStatus">offline</div>
-                        </div>
-                    </div>
-                    <div class="chat-header-actions">
-                        <button class="btn btn--icon btn--ghost" id="msgSearchToggleBtn" title="Search Message Content" aria-label="Search Messages">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        </button>
-                        <button class="btn btn--icon btn--ghost" id="chatInfoBtn" title="Contact Details" aria-label="Contact Details">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
-                        </button>
-                    </div>
-                </header>
-                
-                <!-- Message Search Overlay -->
-                <div class="msg-search-bar" id="msgSearchBar" style="display: none;">
-                    <div class="msg-search-input-wrapper">
-                        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        <input type="text" id="msgSearchInput" class="search-input" placeholder="Find keywords in this thread...">
-                        <button class="btn btn--icon btn--ghost" id="msgSearchCloseBtn" aria-label="Close Search">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                        </button>
-                    </div>
-                    <div class="msg-search-results" id="msgSearchResults" style="display: none;"></div>
-                </div>
+            <!-- Schedule button (inside pill, right side, shown when text) -->
+            <button class="composer-schedule-btn hidden" id="scheduleBtn" aria-label="Schedule message" title="Schedule send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+            </button>
 
-                <!-- Messages Feed -->
-                <div class="messages-container" id="messagesContainer"></div>
+          </div><!-- /composer-pill -->
 
-                <!-- Scroll to bottom action -->
-                <div class="scroll-bottom-btn" id="scrollBottomBtn">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                    <div class="badge hidden" id="scrollBottomBadge">0</div>
-                </div>
+          <!-- Right actions: voice / send (outside the pill) -->
+          <div class="composer-actions-right">
+            <button class="send-btn hidden" id="sendBtn" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"/>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+              </svg>
+            </button>
+            <button class="voice-btn" id="voiceBtn" aria-label="Record voice message" title="Voice message">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+          </div>
 
-                <!-- Reply Bar Preview -->
-                <div class="reply-preview" id="replyPreview">
-                    <div class="reply-preview-content">
-                        <div class="reply-preview-name" id="replyPreviewName">Name</div>
-                        <div class="reply-preview-text" id="replyPreviewText">Message preview</div>
-                    </div>
-                    <button class="btn btn--icon btn--ghost" id="cancelReplyBtn" title="Cancel Reply" aria-label="Cancel Reply">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                </div>
+          <!-- Attach tray popup (hidden by default) -->
+          <div class="attach-tray hidden" id="attachTray" role="dialog" aria-label="Attach options">
+            <!-- File -->
+            <button class="attach-tray-btn" id="attachBtn" aria-label="Attach file" title="File">
+              <div class="attach-tray-btn-icon" style="background:rgba(96,165,250,0.12);color:#60a5fa;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                </svg>
+              </div>
+              <span>File</span>
+            </button>
+            <!-- Photo / camera -->
+            <button class="attach-tray-btn" id="attachPhotoBtn" aria-label="Attach photo" title="Photo">
+              <div class="attach-tray-btn-icon" style="background:rgba(52,211,153,0.12);color:#34d399;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </div>
+              <span>Photo</span>
+            </button>
+          </div>
 
-                <!-- Text Composer area -->
-                <div class="chat-input-area">
-                    <div class="input-actions-left">
-                        <button class="btn btn--icon btn--ghost" id="emojiBtn" title="Choose Emojis" aria-label="Choose Emojis">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
-                        </button>
-                        <button class="btn btn--icon btn--ghost" id="attachBtn" title="Attach Files" aria-label="Attach Files">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-                        </button>
-                        <input type="file" id="fileInput" class="hidden">
-                    </div>
+          <!-- Hidden file input -->
+          <input type="file" id="fileInput" class="hidden" aria-hidden="true">
 
-                    <div class="chat-input-wrapper" id="chatInputWrapper">
-                        <textarea class="chat-input" id="messageInput" placeholder="Write a message..." rows="1"></textarea>
-                    </div>
+        </div><!-- /chat-input-area -->
+      </div><!-- /activeChatView -->
+    </main>
 
-                    <!-- Voice Recording state -->
-                    <div class="voice-recording-bar" id="voiceRecordingBar">
-                        <div class="voice-recording-indicator"></div>
-                        <div class="voice-recording-time" id="voiceRecordingTime">00:00</div>
-                        <div style="flex: 1;"></div>
-                        <div class="voice-recording-cancel" id="voiceRecordingCancel">Cancel</div>
-                    </div>
+    <!-- ═══════════════════════════════════
+         CONTACT INFO PANEL (right side)
+         ═══════════════════════════════════ -->
+    <aside class="user-info-panel" id="userInfoPanel" style="display:none;" role="complementary" aria-label="Contact information">
+      <header class="chat-header">
+        <div class="chat-header-left">
+          <button class="icon-btn" id="closeUserInfoBtn" aria-label="Close contact info">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <span class="chat-header-name" style="font-size:15px;">Contact Info</span>
+        </div>
+      </header>
+      <div class="user-info-content">
+        <div class="avatar avatar--xl" id="infoAvatar"></div>
+        <div style="text-align:center;width:100%;">
+          <h3 style="font-size:18px;font-weight:700;letter-spacing:-0.03em;color:var(--ink);" id="infoName"></h3>
+          <div style="font-size:12px;color:var(--ink-faint);margin-top:4px;font-family:monospace;" id="infoUsername"></div>
+        </div>
+        <div style="width:100%;border-top:1px solid var(--edge);padding-top:20px;">
+          <div class="profile-field-label" style="margin-bottom:8px;">About</div>
+          <div style="font-size:14px;color:var(--ink);font-weight:400;line-height:1.5;" id="infoAbout">—</div>
+        </div>
+      </div>
+    </aside>
+  </div>
 
-                    <div class="input-actions-right">
-                        <button class="send-btn hidden" id="sendBtn" title="Send Message" aria-label="Send Message">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-4.5 h-4.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                        </button>
-                        <button class="voice-btn" id="voiceBtn" title="Record Voice Note" aria-label="Record Voice Note">
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </main>
-        
-        <!-- Contact Information slide-out right -->
-        <aside class="user-info-panel hidden" id="userInfoPanel">
-            <header class="chat-header">
-                <div class="chat-header-left">
-                    <button class="btn btn--icon btn--ghost" id="closeUserInfoBtn" aria-label="Close Contact Info">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                    <div class="chat-header-name">Contact Details</div>
-                </div>
-            </header>
-            <div class="user-info-content">
-                <div class="avatar avatar--xl shadow-md" id="infoAvatar"></div>
-                <div class="text-center mt-3">
-                    <h3 class="text-xl font-bold font-heading" id="infoName"></h3>
-                    <div class="text-xs text-secondary mt-1 font-mono" id="infoUsername"></div>
-                </div>
-                <div class="w-full mt-6 border-t border-border pt-4">
-                    <div class="profile-field-label">About Status</div>
-                    <div class="text-sm text-primary font-medium mt-1" id="infoAbout"></div>
-                </div>
-            </div>
-        </aside>
+  <!-- ═══════════════════════════════════
+       OVERLAYS & PORTALS
+       ═══════════════════════════════════ -->
+
+  <!-- Emoji picker -->
+  <div class="emoji-picker" id="emojiPicker" role="dialog" aria-label="Emoji picker" aria-modal="true"></div>
+
+  <!-- Full-screen image viewer -->
+  <div class="image-viewer" id="imageViewer" role="dialog" aria-label="Image viewer" aria-modal="true">
+    <button class="image-viewer-close" id="closeImageViewer" aria-label="Close image viewer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <img src="" id="viewerImage" alt="Full-size image">
+  </div>
+
+  <!-- File drag-and-drop overlay -->
+  <div class="file-drop-overlay" id="fileDropOverlay" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+    <span>Drop to send file</span>
+  </div>
+
+  <!-- Offline indicator bar -->
+  <div id="offlineIndicator" class="offline-indicator" role="alert" aria-live="polite">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex-shrink:0;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+    <span>You're offline. Messages will send when connection restores.</span>
+    <span id="offlineQueueBadge" class="badge hidden">0</span>
+  </div>
+
+  <!-- Forward modal -->
+  <div id="forwardModal" class="upload-preview-modal" role="dialog" aria-label="Forward message" style="display:none;">
+    <div class="upload-preview-content" style="max-width:420px;">
+      <h3 style="margin:0 0 4px;">Forward to…</h3>
+      <div style="position:relative;margin-bottom:8px;">
+        <input type="text" id="forwardSearchInput" class="form-input" placeholder="Search conversations…" style="height:42px;font-size:13px;padding:0 12px 0 36px;">
+        <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--color-text-tertiary);pointer-events:none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <div class="forward-conversation-list" id="forwardConvList"></div>
+      <div class="upload-preview-actions" style="margin-top:12px;">
+        <button class="btn btn--secondary" id="forwardCancelBtn">Cancel</button>
+      </div>
     </div>
+  </div>
 
-    <!-- Modals, pickers & overlays -->
-    <div class="emoji-picker" id="emojiPicker"></div>
-
-    <div class="image-viewer" id="imageViewer">
-        <div class="image-viewer-close" id="closeImageViewer">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </div>
-        <img src="" id="viewerImage" alt="Enlarged media view">
+  <!-- Context menu -->
+  <div class="message-context-menu hidden" id="messageContextMenu" role="menu" aria-label="Message actions">
+    <div class="context-menu-item" id="menuReply" role="menuitem" tabindex="0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+      Reply
     </div>
-
-    <div class="file-drop-overlay" id="fileDropOverlay">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
-        <span class="mt-2 font-semibold">Drop file to send instantly</span>
+    <div class="context-menu-item" id="menuForward" role="menuitem" tabindex="0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+      Forward
     </div>
-
-    <!-- Message Context Menu -->
-    <div class="message-context-menu hidden" id="messageContextMenu">
-        <div class="context-menu-item font-semibold" id="menuReply">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
-            Reply Message
-        </div>
-        <div class="context-menu-item font-semibold" id="menuForward">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"></polyline><path d="M4 18v-2a4 4 0 0 1 4-4h12"></path></svg>
-            Forward Message
-        </div>
-        <div class="context-menu-item font-semibold" id="menuEdit" style="display: none;">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-            Edit Message
-        </div>
-        <div class="dropdown-separator"></div>
-        <div class="context-menu-item context-menu-item--danger font-semibold" id="menuDeleteMe">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-            Delete for me
-        </div>
-        <div class="context-menu-item context-menu-item--danger font-semibold" id="menuDeleteEveryone" style="display: none;">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-            Delete for everyone
-        </div>
+    <div class="context-menu-item" id="menuEdit" role="menuitem" tabindex="0" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit
     </div>
+    <div class="context-menu-item" id="menuViewHistory" role="menuitem" tabindex="0" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><polyline points="12 7 12 12 15 15"/></svg>
+      View History
+    </div>
+    <div class="dropdown-separator"></div>
+    <div class="context-menu-item context-menu-item--danger" id="menuDeleteMe" role="menuitem" tabindex="0">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Delete for me
+    </div>
+    <div class="context-menu-item context-menu-item--danger" id="menuDeleteEveryone" role="menuitem" tabindex="0" style="display:none;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Delete for everyone
+    </div>
+  </div>
 
-    <!-- Main scripts -->
-    <script src="/js/utils.js" defer></script>
-    <script src="/js/app.js" defer></script>
-    <script src="/js/auth.js" defer></script>
-    <script src="/js/sidebar.js" defer></script>
-    <script src="/js/messages.js" defer></script>
-    <script src="/js/notifications.js" defer></script>
-    <script src="/js/chat.js" defer></script>
+  <!-- Composer enhancements: attach tray + send micro-interaction -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+      /* ── Schedule btn: show only when text exists ── */
+      const msgInput = document.getElementById('messageInput');
+      const schedBtn = document.getElementById('scheduleBtn');
+      if (msgInput && schedBtn) {
+        msgInput.addEventListener('input', () => {
+          schedBtn.classList.toggle('hidden', !msgInput.value.trim().length);
+        });
+      }
+
+      /* ── Attach tray toggle ── */
+      const attachTrayBtn = document.getElementById('attachTrayBtn');
+      const attachTray    = document.getElementById('attachTray');
+      const attachBtn     = document.getElementById('attachBtn');      // existing file trigger
+      const attachPhotoBtn= document.getElementById('attachPhotoBtn');
+      const fileInput     = document.getElementById('fileInput');
+
+      if (attachTrayBtn && attachTray) {
+        /* Toggle tray open/close */
+        attachTrayBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isOpen = !attachTray.classList.contains('hidden');
+          attachTray.classList.toggle('hidden', isOpen);
+          attachTrayBtn.classList.toggle('active', !isOpen);
+        });
+
+        /* File button inside tray triggers the existing hidden file input */
+        attachBtn?.addEventListener('click', () => {
+          attachTray.classList.add('hidden');
+          attachTrayBtn.classList.remove('active');
+          fileInput?.click();
+        });
+
+        /* Photo button — also uses file input but image-only */
+        attachPhotoBtn?.addEventListener('click', () => {
+          attachTray.classList.add('hidden');
+          attachTrayBtn.classList.remove('active');
+          if (fileInput) {
+            fileInput.setAttribute('accept', 'image/*');
+            fileInput.click();
+            /* Reset accept after pick */
+            fileInput.addEventListener('change', () => {
+              fileInput.removeAttribute('accept');
+            }, { once: true });
+          }
+        });
+
+        /* Close tray when clicking outside */
+        document.addEventListener('click', (e) => {
+          if (!attachTray.contains(e.target) && e.target !== attachTrayBtn) {
+            attachTray.classList.add('hidden');
+            attachTrayBtn.classList.remove('active');
+          }
+        });
+
+        /* Close tray on Escape */
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            attachTray.classList.add('hidden');
+            attachTrayBtn.classList.remove('active');
+          }
+        });
+      }
+
+      /* ── Send button: brief "sending" class for micro-feedback ── */
+      const sendBtn = document.getElementById('sendBtn');
+      if (sendBtn) {
+        sendBtn.addEventListener('click', () => {
+          sendBtn.classList.add('sending');
+          setTimeout(() => sendBtn.classList.remove('sending'), 400);
+        });
+      }
+
+    });
+  </script>
+
+  <!-- Core scripts -->
+  <script src="/js/utils.js" defer></script>
+  <script src="/js/app.js" defer></script>
+  <script src="/js/sidebar.js" defer></script>
+  <script src="/js/messages.js" defer></script>
+  <script src="/js/notifications.js" defer></script>
+  <script src="/js/chat.js" defer></script>
 </body>
 </html>

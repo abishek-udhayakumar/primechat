@@ -48,11 +48,15 @@
 /* ── Message Row ── */
 .message {
     display: flex;
-    margin-bottom: var(--space-2);
+    margin-bottom: var(--space-3);
     animation: msgIn 0.2s ease-out;
     position: relative;
+    padding: 0 var(--space-1);
 }
-.message.grouped { margin-bottom: 2px; }
+.message.grouped { 
+    margin-bottom: 2px;
+    padding: 0;
+}
 .message.sent  { flex-direction: row-reverse; }
 .message.received { flex-direction: row; }
 
@@ -146,6 +150,7 @@
     font-size: var(--fs-base);
     line-height: var(--lh-relaxed);
     white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* ── Deleted Message ── */
@@ -165,12 +170,14 @@
     align-items: center;
     gap: var(--space-1);
     justify-content: flex-end;
-    margin-top: 3px;
+    margin-top: var(--space-1);
+    padding-top: 2px;
 }
 
 .message-time {
-    font-size: 10px;
-    opacity: 0.65;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    opacity: 0.8;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.02em;
     white-space: nowrap;
@@ -187,12 +194,23 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
-    transition: color var(--transition-fast);
+    transition: color var(--transition-fast), transform var(--transition-fast);
 }
 .message-ticks svg { width: 16px; height: 10px; }
-.message-ticks.sent      { color: rgba(255,255,255,0.55); }
-.message-ticks.delivered { color: rgba(255,255,255,0.75); }
-.message-ticks.read      { color: #53bdeb; }
+.message-ticks.sending    { color: rgba(255,255,255,0.45); }
+.message-ticks.sending svg { width: 14px; height: 14px; }
+.message-ticks.sent       { color: rgba(255,255,255,0.55); }
+.message-ticks.delivered  { color: rgba(255,255,255,0.75); }
+.message-ticks.read       { color: #53bdeb; transform: scale(1.1); }
+
+/* Spinner animation for sending state */
+@keyframes tickSpin {
+    to { transform: rotate(360deg); }
+}
+.tick-spinner {
+    animation: tickSpin 1s linear infinite;
+    transform-origin: center;
+}
 
 /* ── Action Button (hover dropdown trigger) ── */
 .msg-action-btn {
@@ -256,6 +274,11 @@
     cursor: zoom-in;
     position: relative;
     background: rgba(0,0,0,0.1);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.message-image:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
 }
 .message-image img {
     display: block;
@@ -328,10 +351,13 @@
     background: rgba(0,0,0,0.12);
     border-radius: var(--radius-md);
     cursor: pointer;
-    transition: background var(--transition-fast);
+    transition: background var(--transition-fast), transform var(--transition-fast);
     min-width: 200px;
 }
-.message-file:hover { background: rgba(0,0,0,0.2); }
+.message-file:hover { 
+    background: rgba(0,0,0,0.2);
+    transform: translateY(-1px);
+}
 .message-file-icon {
     width: 40px; height: 40px;
     border-radius: var(--radius-md);
@@ -357,6 +383,7 @@
     gap: var(--space-3);
     min-width: 200px;
     max-width: 300px;
+    padding: var(--space-1) 0;
 }
 
 .voice-play-btn {
@@ -481,3 +508,89 @@
 }
 .image-viewer-close:hover { background: rgba(255,255,255,0.2); }
 .image-viewer-close svg { width: 20px; height: 20px; color: #fff; }
+
+/* ── Group Message Sender Name ── */
+.message-sender-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-accent);
+    margin-bottom: 2px;
+    padding: 0;
+    line-height: 1.2;
+}
+
+/* ── Reactions ── */
+.message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 6px 0 2px;
+    padding: 0;
+}
+.reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast), transform var(--transition-fast);
+    line-height: 1.4;
+}
+.reaction-pill:hover {
+    background: var(--color-bg-elevated);
+    transform: scale(1.05);
+}
+.reaction-pill.reacted {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: var(--color-accent);
+}
+.msg-add-reaction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    margin-top: 4px;
+}
+.message-bubble:hover .msg-add-reaction {
+    opacity: 1;
+}
+.msg-add-reaction svg {
+    width: 14px;
+    height: 14px;
+    color: var(--color-text-secondary);
+}
+.reaction-picker {
+    display: flex;
+    gap: 2px;
+    padding: 6px 8px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    z-index: 1000;
+}
+.reaction-picker-btn {
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    transition: transform var(--transition-fast);
+    line-height: 1;
+}
+.reaction-picker-btn:hover {
+    transform: scale(1.3);
+}

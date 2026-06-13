@@ -6,6 +6,14 @@ if (file_exists(__DIR__ . '/../.env')) {
     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
     $dotenv->load();
 }
+
+// ── Security Headers ──
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: DENY');
+header('X-XSS-Protection: 1; mode=block');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss: ws: https:; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';");
+
 /**
  * PrimeChat — Front Controller
  * 
@@ -91,6 +99,12 @@ if (isset($routes[$uri])) {
         $csrfTag = "\n    <meta name=\"csrf-token\" content=\"$csrfToken\">";
         if (preg_match('/<head[^>]*>/i', $html, $matches)) {
             $html = str_replace($matches[0], $matches[0] . $csrfTag, $html);
+        }
+
+        // Inject VAPID public key meta tag if configured
+        if (!empty($_ENV['VAPID_PUBLIC_KEY'])) {
+            $vapidTag = "\n    <meta name=\"vapid-public-key\" content=\"" . $_ENV['VAPID_PUBLIC_KEY'] . '">';
+            $html = str_replace('</head>', $vapidTag . "\n</head>", $html);
         }
         
         echo $html;

@@ -39,17 +39,10 @@ foreach ($conversations as $conv) {
         $lastMessagePreview = '🎤 Voice message';
     }
 
-    $formatted[] = [
+    $entry = [
         'i'  => $conv['conversation_id'],
         't'  => $conv['type'],
-        'u'  => [
-            'i'  => $conv['other_user_id'],
-            'u'  => $conv['other_username'],
-            'n'  => $conv['other_display_name'],
-            'a'  => $conv['other_avatar_url'],
-            's'  => $conv['other_status'],
-            'l'  => $conv['other_last_seen'],
-        ],
+        'n'  => $conv['type'] === 'group' ? ($conv['conversation_name'] ?? 'Group') : null,
         'm'  => [
             'i'  => $conv['last_message_id'],
             'c'  => $lastMessagePreview,
@@ -60,6 +53,20 @@ foreach ($conversations as $conv) {
         ],
         'uc' => (int) $conv['unread_count'],
     ];
+
+    // Only include other_user for direct conversations
+    if ($conv['type'] === 'direct') {
+        $entry['u'] = [
+            'i'  => $conv['other_user_id'],
+            'u'  => $conv['other_username'],
+            'n'  => $conv['other_display_name'],
+            'a'  => $conv['other_avatar_url'],
+            's'  => $conv['other_status'],
+            'l'  => $conv['other_last_seen'],
+        ];
+    }
+
+    $formatted[] = $entry;
 }
 
 Response::success([

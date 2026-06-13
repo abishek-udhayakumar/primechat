@@ -18,108 +18,187 @@ class Chat {
     /**
      * Send a message to a user (creates conversation if needed)
      */
-    public function sendMessage(int $senderId, int $recipientId, string $content, string $type = 'text', ?int $replyToId = null, ?string $clientMsgId = null): array {
-        // Get or create conversation
-        $convId = $this->conversationModel->getOrCreateDirect($senderId, $recipientId);
-
-        // Sanitize content
-        $content = Sanitizer::sanitizeMessage($content);
-
-        if (empty($content) && $type === 'text') {
-            return ['success' => false, 'error' => 'Message cannot be empty'];
+    public function sendMessage(int $senderId, int $recipientId, string $content, string $type = 'text', ?int $replyToId = null, ?string $clientMsgId = null, ?int $expiresIn = null): array {
+        // Check if either user has blocked the other (read-only, outside transaction)
+        $blockList = new BlockList();
+        if ($blockList->isEitherBlocked($senderId, $recipientId)) {
+            return ['success' => false, 'error' => 'Cannot send message. User may have blocked you.'];
         }
 
-        // Send message
-        $messageId = $this->messageModel->send($convId, $senderId, $content, $type, $replyToId, null, $clientMsgId);
+        $this->db->beginTransaction();
+        try {
+            // Get or create conversation
+            $convId = $this->conversationModel->getOrCreateDirect($senderId, $recipientId);
 
-        // Update conversation timestamp
-        $this->conversationModel->touch($convId);
+            // Sanitize content
+            $content = Sanitizer::sanitizeMessage($content);
 
-        // Increment unread count for recipient
-        $this->conversationModel->incrementUnread($convId, $recipientId);
+            if (empty($content) && $type === 'text') {
+                $this->db->rollBack();
+                return ['success' => false, 'error' => 'Message cannot be empty'];
+            }
 
-        // Clear typing status
-        $this->clearTyping($senderId, $convId);
+            // Send message
+            $messageId = $this->messageModel->send($convId, $senderId, $content, $type, $replyToId, null, $clientMsgId, null, $expiresIn);
 
-        // Fetch the complete message to return
-        $message = $this->messageModel->findById($messageId);
+            // Update conversation timestamp and last_message_id
+            $this->conversationModel->touch($convId);
+            $this->updateLastMessageId($convId, $messageId);
 
-        return [
-            'success'         => true,
-            'message_id'      => $messageId,
-            'conversation_id' => $convId,
-            'message'         => $message,
-        ];
+            // Increment unread count for recipient
+            $this->conversationModel->incrementUnread($convId, $recipientId);
+
+            // Clear typing status
+            $this->clearTyping($senderId, $convId);
+
+            $this->db->commit();
+
+            // Fetch the complete message to return
+            $message = $this->messageModel->findById($messageId);
+
+            return [
+                'success'         => true,
+                'message_id'      => $messageId,
+                'conversation_id' => $convId,
+                'message'         => $message,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 
     /**
      * Send a message to an existing conversation
      */
     public function sendToConversation(int $senderId, int $conversationId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null, ?string $clientMsgId = null): array {
-        // Verify sender is a participant
+        // Verify sender is a participant (read-only, outside transaction)
         if (!$this->conversationModel->isParticipant($conversationId, $senderId)) {
             return ['success' => false, 'error' => 'Not a participant'];
         }
 
-        $content = Sanitizer::sanitizeMessage($content);
-
-        if (empty($content) && $type === 'text') {
-            return ['success' => false, 'error' => 'Message cannot be empty'];
-        }
-
-        // Send message
-        $messageId = $this->messageModel->send($conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $clientMsgId);
-
-        // Update conversation
-        $this->conversationModel->touch($conversationId);
-
-        // Increment unread for other participants
-        $participants = $this->conversationModel->getParticipants($conversationId);
-        foreach ($participants as $p) {
-            if ($p['id'] !== $senderId) {
-                $this->conversationModel->incrementUnread($conversationId, $p['id']);
+        // For direct conversations, check block status (read-only, outside transaction)
+        $convType = $this->db->query("SELECT type FROM conversations WHERE id = ?", [$conversationId])->fetch();
+        if ($convType && $convType['type'] === 'direct') {
+            $participants = $this->conversationModel->getParticipants($conversationId);
+            foreach ($participants as $p) {
+                if ((int)$p['id'] !== $senderId) {
+                    $blockList = new BlockList();
+                    if ($blockList->isEitherBlocked($senderId, (int)$p['id'])) {
+                        return ['success' => false, 'error' => 'Cannot send message. User may have blocked you.'];
+                    }
+                }
             }
         }
 
-        // Clear typing
-        $this->clearTyping($senderId, $conversationId);
+        $this->db->beginTransaction();
+        try {
+            $content = Sanitizer::sanitizeMessage($content);
 
-        $message = $this->messageModel->findById($messageId);
+            if (empty($content) && $type === 'text') {
+                $this->db->rollBack();
+                return ['success' => false, 'error' => 'Message cannot be empty'];
+            }
 
-        return [
-            'success'         => true,
-            'message_id'      => $messageId,
-            'conversation_id' => $conversationId,
-            'message'         => $message,
-        ];
+            // Send message
+            $messageId = $this->messageModel->send($conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $clientMsgId, null, null);
+
+            // Update conversation
+            $this->conversationModel->touch($conversationId);
+            $this->updateLastMessageId($conversationId, $messageId);
+
+            // Increment unread for other participants
+            $participants = $this->conversationModel->getParticipants($conversationId);
+            foreach ($participants as $p) {
+                if ($p['id'] !== $senderId) {
+                    $this->conversationModel->incrementUnread($conversationId, $p['id']);
+                }
+            }
+
+            // Clear typing
+            $this->clearTyping($senderId, $conversationId);
+
+            $this->db->commit();
+
+            $message = $this->messageModel->findById($messageId);
+
+            return [
+                'success'         => true,
+                'message_id'      => $messageId,
+                'conversation_id' => $conversationId,
+                'message'         => $message,
+            ];
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 
     /**
-     * Set typing status
+     * Set typing status. Uses Redis if available, falls back to database.
      */
     public function setTyping(int $userId, int $conversationId): void {
-        $this->db->query(
-            "INSERT INTO typing_status (user_id, conversation_id, started_at)
-             VALUES (?, ?, NOW())
-             ON DUPLICATE KEY UPDATE started_at = NOW()",
-            [$userId, $conversationId]
-        );
+        if (class_exists('RedisClient') && RedisClient::getInstance()->isConnected()) {
+            // Use Redis with TTL
+            $redis = RedisClient::getInstance();
+            $key = "typing:$conversationId:$userId";
+            $redis->set($key, 1, TYPING_TIMEOUT_SECONDS);
+        } else {
+            // Fallback to database
+            $this->db->query(
+                "INSERT INTO typing_status (user_id, conversation_id, started_at)
+                 VALUES (?, ?, NOW())
+                 ON DUPLICATE KEY UPDATE started_at = NOW()",
+                [$userId, $conversationId]
+            );
+        }
     }
 
     /**
-     * Clear typing status
+     * Clear typing status. Uses Redis if available, falls back to database.
      */
     public function clearTyping(int $userId, int $conversationId): void {
-        $this->db->query(
-            "DELETE FROM typing_status WHERE user_id = ? AND conversation_id = ?",
-            [$userId, $conversationId]
-        );
+        if (class_exists('RedisClient') && RedisClient::getInstance()->isConnected()) {
+            // Use Redis
+            $redis = RedisClient::getInstance();
+            $key = "typing:$conversationId:$userId";
+            $redis->del($key);
+        } else {
+            // Fallback to database
+            $this->db->query(
+                "DELETE FROM typing_status WHERE user_id = ? AND conversation_id = ?",
+                [$userId, $conversationId]
+            );
+        }
     }
 
     /**
-     * Get who is typing in a conversation (excluding current user)
+     * Get who is typing in a conversation (excluding current user).
+     * Uses Redis if available, falls back to database.
      */
     public function getTypingUsers(int $conversationId, int $currentUserId): array {
+        if (class_exists('RedisClient') && RedisClient::getInstance()->isConnected()) {
+            // Use Redis - scan for typing keys
+            $redis = RedisClient::getInstance();
+            $typingUsers = [];
+
+            // Get all participants in the conversation
+            $participants = $this->conversationModel->getParticipants($conversationId);
+            foreach ($participants as $p) {
+                if ((int)$p['id'] === $currentUserId) continue;
+                $key = "typing:$conversationId:" . $p['id'];
+                if ($redis->exists($key)) {
+                    $typingUsers[] = [
+                        'id' => $p['id'],
+                        'display_name' => $p['display_name'],
+                    ];
+                }
+            }
+
+            return $typingUsers;
+        }
+
+        // Fallback to database
         // Auto-clean stale typing statuses (older than TYPING_TIMEOUT_SECONDS)
         $this->db->query(
             "DELETE FROM typing_status WHERE started_at < DATE_SUB(NOW(), INTERVAL ? SECOND)",
@@ -156,6 +235,17 @@ class Chat {
             'other_user_last_seen' => $otherUser ? $otherUser['last_seen'] : null,
             'typing_users'         => $typingUsers,
         ];
+    }
+
+    /**
+     * Update the denormalized last_message_id on a conversation.
+     * Uses MAX to handle any ordering edge cases.
+     */
+    private function updateLastMessageId(int $conversationId, int $messageId): void {
+        $this->db->query(
+            "UPDATE conversations SET last_message_id = ? WHERE id = ? AND (last_message_id IS NULL OR ? > last_message_id)",
+            [$messageId, $conversationId, $messageId]
+        );
     }
 
     /**

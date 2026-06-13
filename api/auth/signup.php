@@ -6,6 +6,9 @@
 require_once __DIR__ . '/../bootstrap.php';
 Response::requireMethod('POST');
 
+// Per-endpoint rate limiting: 3 requests per 60 seconds
+RateLimiter::checkNamed('signup', 3, 60);
+
 $data = Response::getJsonBody();
 
 $auth = new Auth();

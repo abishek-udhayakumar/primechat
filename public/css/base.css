@@ -38,7 +38,7 @@ body {
     background: var(--scrollbar-thumb);
     border-radius: var(--radius-full);
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
 
 /* ── Selection ── */
 ::selection {
@@ -73,6 +73,32 @@ button:focus-visible {
     transition: all var(--transition-fast);
     user-select: none;
     white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+}
+.btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255,255,255,0.1);
+    opacity: 0;
+    transition: opacity var(--transition-fast);
+    pointer-events: none;
+    border-radius: inherit;
+}
+.btn:hover::after {
+    opacity: 1;
+}
+
+/* ── Focus Visible Styles ── */
+.btn:focus-visible,
+.btn--primary:focus-visible,
+.btn--secondary:focus-visible,
+.btn--ghost:focus-visible,
+.btn--icon:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(99,102,241,0.2);
 }
 
 .btn--primary {
@@ -112,6 +138,10 @@ button:focus-visible {
     width: 38px;
     height: 38px;
     flex-shrink: 0;
+    position: relative;
+}
+.btn--icon::after {
+    border-radius: var(--radius-full);
 }
 .btn--icon svg {
     width: 18px;
@@ -181,6 +211,48 @@ button:focus-visible {
 .spinner--lg  { width: 36px; height: 36px; border-width: 3px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Loading Overlay ── */
+.loading-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(10, 10, 15, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: var(--z-overlay);
+    backdrop-filter: blur(4px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
+}
+.loading-overlay.show {
+    opacity: 1;
+    pointer-events: all;
+}
+.loading-overlay .spinner--lg {
+    width: 48px;
+    height: 48px;
+    border-width: 4px;
+}
+
+/* ── Skip Link (Accessibility) ── */
+.skip-link {
+    position: absolute;
+    top: -100%;
+    left: var(--space-4);
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-accent);
+    color: #fff;
+    border-radius: var(--radius-md);
+    font-weight: var(--fw-semibold);
+    z-index: 9999;
+    transition: top var(--transition-fast);
+    text-decoration: none;
+}
+.skip-link:focus {
+    top: var(--space-4);
+}
+
 /* ── Badge ── */
 .badge {
     display: inline-flex;
@@ -247,6 +319,15 @@ button:focus-visible {
     to   { transform: translateX(0);    opacity: 1; }
 }
 
+/* ── Toast Exit Animation ── */
+.toast.exiting {
+    animation: slideOutRight 0.25s ease-in forwards;
+}
+@keyframes slideOutRight {
+    from { transform: translateX(0);    opacity: 1; }
+    to   { transform: translateX(110%); opacity: 0; }
+}
+
 /* ── Utility ── */
 .hidden { display: none !important; }
 .sr-only {
@@ -254,6 +335,38 @@ button:focus-visible {
     width: 1px; height: 1px;
     overflow: hidden; clip: rect(0,0,0,0);
     white-space: nowrap;
+}
+
+/* ── Error State ── */
+.error-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    padding: var(--space-8);
+    text-align: center;
+}
+.error-state-icon {
+    width: 64px; height: 64px;
+    border-radius: var(--radius-full);
+    background: var(--color-danger-light);
+    display: flex; align-items: center; justify-content: center;
+}
+.error-state-icon svg {
+    width: 32px; height: 32px;
+    color: var(--color-danger);
+}
+.error-state h3 {
+    font-size: var(--fs-lg);
+    font-weight: var(--fw-semibold);
+    color: var(--color-text-primary);
+}
+.error-state p {
+    font-size: var(--fs-base);
+    color: var(--color-text-secondary);
+    max-width: 320px;
+    line-height: var(--lh-relaxed);
 }
 
 /* ── Dropdown / Context Menu base ── */
@@ -272,7 +385,7 @@ button:focus-visible {
     border: 1px solid var(--color-border);
     position: relative;
     cursor: pointer;
-    transition: background var(--transition-base);
+    transition: background var(--transition-base), border-color var(--transition-base);
 }
 .theme-toggle::after {
     content: '';
@@ -283,7 +396,10 @@ button:focus-visible {
     background: var(--color-text-secondary);
     transition: transform var(--transition-base), background var(--transition-base);
 }
-[data-theme="light"] .theme-toggle { background: var(--color-accent); }
+.theme-toggle:hover {
+    border-color: var(--color-border-hover);
+}
+[data-theme="light"] .theme-toggle { background: var(--color-accent); border-color: var(--color-accent); }
 [data-theme="light"] .theme-toggle::after {
     transform: translateX(22px);
     background: #fff;
@@ -299,6 +415,55 @@ button:focus-visible {
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
+    }
+}
+
+/* ══════════════════════════════════════
+   MICRO-INTERACTIONS & POLISH
+   ══════════════════════════════════════ */
+
+/* ── Focus Ring Animation ── */
+@keyframes focusRing {
+    0% { box-shadow: 0 0 0 0 rgba(99,102,241,0.4); }
+    100% { box-shadow: 0 0 0 4px rgba(99,102,241,0); }
+}
+.btn:focus-visible,
+.send-btn:focus-visible,
+.voice-btn:focus-visible,
+.scroll-bottom-btn:focus-visible {
+    animation: focusRing 0.3s ease-out;
+}
+
+/* ── Smooth Scale Transitions ── */
+.btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ── Keyboard Navigation ── */
+.conversation-item:focus-visible,
+.context-menu-item:focus-visible,
+.msg-action-btn:focus-visible,
+.reaction-picker-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
+    background: var(--color-accent-light);
+}
+
+/* ── High Contrast Mode ── */
+@media (forced-colors: active) {
+    .btn {
+        border: 1px solid ButtonText;
+    }
+    .btn:focus-visible {
+        outline: 2px solid Highlight;
+        outline-offset: 2px;
+    }
+    .status-dot {
+        border-color: Canvas;
     }
 }
 

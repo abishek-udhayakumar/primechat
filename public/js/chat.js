@@ -5,6 +5,13 @@
 
 'use strict';
 
+// ── WebSocket state ──
+let _ws = null;
+let _wsReconnectTimer = null;
+let _wsConnected = false;
+const WS_PORT = window.PrimeChatConfig?.wsPort || (location.port === '443' || location.port === '' ? location.port || '443' : '8080');
+const WS_RECONNECT_DELAY = 3000;
+
 // ── Polling state ──
 let _pollTimeout = null;
 let _pollAbortController = null;
@@ -37,6 +44,220 @@ function _getCachedMessages(convId) {
     return _msgCache[convId] || null;
 }
 
+// ─────────────────────────────────────────
+// WEBSOCKET CLIENT
+// ─────────────────────────────────────────
+
+function _getWsUrl() {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const sessionCookie = document.cookie.split('; ').find(r => r.startsWith('PRIMECHAT_SESSION='));
+    const sessionId = sessionCookie ? sessionCookie.split('=')[1] : '';
+    return `${proto}//${host}:${WS_PORT}?session_id=${encodeURIComponent(sessionId)}`;
+}
+
+function _connectWs() {
+    if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return;
+
+    try {
+        _ws = new WebSocket(_getWsUrl());
+
+        _ws.onopen = () => {
+            _wsConnected = true;
+            console.log('[PrimeChat WS] Connected');
+            _stopPolling();
+
+            // Subscribe to active conversation
+            const convId = window.appState.activeConversationId;
+            if (convId) {
+                _wsSend({ type: 'subscribe', conversation_id: convId });
+            }
+
+            EventBus.emit('ws:connected');
+        };
+
+        _ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                _handleWsMessage(data);
+            } catch (e) {
+                console.error('[PrimeChat WS] Parse error:', e);
+            }
+        };
+
+        _ws.onclose = () => {
+            _wsConnected = false;
+            console.log('[PrimeChat WS] Disconnected');
+            EventBus.emit('ws:disconnected');
+
+            // Fall back to polling
+            if (window.appState.activeConversationId) {
+                _startPolling();
+            }
+
+            // Reconnect after delay
+            _wsReconnectTimer = setTimeout(_connectWs, WS_RECONNECT_DELAY);
+        };
+
+        _ws.onerror = (e) => {
+            console.error('[PrimeChat WS] Error:', e);
+            _ws.close();
+        };
+    } catch (e) {
+        console.error('[PrimeChat WS] Connection failed:', e);
+        _wsConnected = false;
+        if (window.appState.activeConversationId) {
+            _startPolling();
+        }
+    }
+}
+
+function _wsSend(data) {
+    if (_ws && _ws.readyState === WebSocket.OPEN) {
+        _ws.send(JSON.stringify(data));
+        return true;
+    }
+    return false;
+}
+
+function _disconnectWs() {
+    _wsConnected = false;
+    clearTimeout(_wsReconnectTimer);
+    if (_ws) {
+        _ws.onclose = null; // prevent auto-reconnect
+        _ws.close();
+        _ws = null;
+    }
+}
+
+function _handleWsMessage(data) {
+    switch (data.type) {
+        case 'connected':
+            console.log('[PrimeChat WS] Authenticated as user', data.user_id);
+            break;
+
+        case 'subscribed':
+            console.log('[PrimeChat WS] Subscribed to conversation', data.conversation_id);
+            break;
+
+        case 'new_message':
+            _handleWsNewMessage(data);
+            break;
+
+        case 'typing':
+            _handleWsTyping(data);
+            break;
+
+        case 'status':
+            _handleWsStatus(data);
+            break;
+
+        case 'read_receipt':
+            _handleWsReadReceipt(data);
+            break;
+
+        case 'pong':
+            break;
+
+        case 'error':
+            console.error('[PrimeChat WS] Server error:', data.message);
+            break;
+    }
+}
+
+function _handleWsNewMessage(data) {
+    const convId = data.conversation_id;
+    const msg = data.message ? _remapMessage(data.message) : null;
+
+    if (!msg) return;
+
+    // Only process if we're viewing this conversation
+    if (window.appState.activeConversationId !== convId) return;
+
+    _lastMessageReceivedAt = Date.now();
+
+    const existingIds = new Set(window.appState.messages.map(m => m.id));
+    if (existingIds.has(msg.id)) return;
+
+    // Replace temp message if client_msg_id matches
+    if (msg.client_msg_id) {
+        const tempIdx = window.appState.messages.findIndex(m => m.id === msg.client_msg_id);
+        if (tempIdx !== -1) {
+            _replaceTempMessage(msg.client_msg_id, msg);
+            return;
+        }
+    }
+
+    // Append new message
+    const wasAtBottom = _isAtBottom();
+    window.appState.messages.push(msg);
+    window.appState.lastMessageId = _lastId(window.appState.messages);
+
+    window._appendMessages([msg]);
+    _pruneOldMessages();
+
+    if (wasAtBottom) {
+        scrollToBottom(true);
+        _markLastRead();
+    } else {
+        _showScrollBadge(1);
+    }
+
+    EventBus.emit('message:receive', { messages: [msg], convId });
+    if (!msg.is_mine) _playSound();
+    _cacheMessages(convId);
+}
+
+function _handleWsTyping(data) {
+    if (window.appState.activeConversationId !== data.conversation_id) return;
+
+    if (data.is_typing) {
+        window.appState.typingUsers.add(data.user_id);
+    } else {
+        window.appState.typingUsers.delete(data.user_id);
+    }
+
+    const isTyping = window.appState.typingUsers.size > 0;
+    EventBus.emit(isTyping ? 'typing:start' : 'typing:stop', { convId: data.conversation_id });
+    _toggleTypingBubble(isTyping);
+}
+
+function _handleWsStatus(data) {
+    if (!window.appState.activeOtherUser) return;
+    if (data.user_id !== window.appState.activeOtherUser.id) return;
+
+    if (data.status === 'online') {
+        window.appState.onlineUsers.add(data.user_id);
+    } else {
+        window.appState.onlineUsers.delete(data.user_id);
+    }
+
+    const lastSeen = data.last_seen || null;
+
+    // Update the conversation's other_user status in appState
+    const conv = (window.appState.conversations || []).find(c => c.conversation_id === window.appState.activeConversationId);
+    if (conv && conv.other_user) {
+        conv.other_user.status = data.status;
+        if (lastSeen) conv.other_user.last_seen = lastSeen;
+    }
+
+    EventBus.emit('user:status', { status: data.status, lastSeen });
+    _updateHeaderStatus({ typing: false, other_user_status: data.status, other_last_seen: lastSeen });
+
+    // Update sidebar status dot in real-time
+    const dot = document.querySelector(`.conversation-item[data-conv-id="${window.appState.activeConversationId}"] .status-dot`);
+    if (dot) {
+        dot.className = `status-dot${data.status === 'online' ? ' online' : ''}`;
+    }
+}
+
+function _handleWsReadReceipt(data) {
+    if (window.appState.activeConversationId !== data.conversation_id) return;
+
+    EventBus.emit('message:read', { lastReadId: data.last_read_id });
+    _updateReadTicks(data.last_read_id, 'online', null);
+}
+
 // ── Initialize chat module ──
 window.initChat = () => {
     _bindInputHandlers();
@@ -44,19 +265,30 @@ window.initChat = () => {
     _bindPanelHandlers();
     _bindMessageSearchHandlers();
     document.getElementById('cancelReplyBtn')?.addEventListener('click', cancelReply);
+    // Attempt WebSocket connection
+    _connectWs();
 };
 
 // ─────────────────────────────────────────
 // OPEN CONVERSATION
 // ─────────────────────────────────────────
 window.openConversation = async (conversationId, otherUser) => {
+    // Unsubscribe from previous conversation via WS
+    if (_wsConnected && window.appState.activeConversationId) {
+        _wsSend({ type: 'unsubscribe', conversation_id: window.appState.activeConversationId });
+    }
+
     // Stop previous poll
     _stopPolling();
+
+    // Detect group conversations
+    const isGroup = otherUser && otherUser.isGroup === true;
 
     // Reset state
     Object.assign(window.appState, {
         activeConversationId: conversationId,
-        activeOtherUser: otherUser,
+        activeOtherUser: isGroup ? null : otherUser,
+        activeGroupInfo: isGroup ? otherUser : null,
         messages: [],
         lastMessageId: 0,
         replyingTo: null,
@@ -76,7 +308,6 @@ window.openConversation = async (conversationId, otherUser) => {
     _updateHeader(otherUser);
 
     // Loading spinner
-    // Skeleton instead of spinner — layout looks populated immediately
     document.getElementById('messagesContainer').innerHTML =
         `<div class="msg-skeleton">
             <div class="msg-skel-bubble msg-skel-bubble--recv" style="width:60%"></div>
@@ -97,8 +328,12 @@ window.openConversation = async (conversationId, otherUser) => {
     // Load initial messages
     await _loadInitialMessages();
 
-    // Start real-time polling
-    _startPolling();
+    // Start real-time connection
+    if (_wsConnected) {
+        _wsSend({ type: 'subscribe', conversation_id: conversationId });
+    } else {
+        _startPolling();
+    }
 
     // Notify the notification engine this conversation is now active
     EventBus.emit('conversation:opened', window.appState.activeConversationId);
@@ -212,6 +447,10 @@ function _remapMessage(m) {
         read_status: m.rs,
         created_at: m.ca,
         client_msg_id: m.cm,
+        reactions: m.rt || null,
+        thread_root_id: m.tr || null,
+        thread_reply_count: m.tc || 0,
+        expires_at: m.ex || null,
         _remapped: true
     };
     if (m.re) {
@@ -432,7 +671,7 @@ async function sendMessage(content = null, type = 'text') {
         type,
         is_mine: true,
         is_edited: false,
-        read_status: 'sent',
+        read_status: 'sending',
         created_at: new Date().toISOString(),
         reply: window.appState.replyingTo
             ? { content: window.appState.replyingTo.content, sender_name: 'You' }
@@ -453,6 +692,22 @@ async function sendMessage(content = null, type = 'text') {
     EventBus.emit('message:send', { message: tempMsg });
 
     _isSending = true;
+
+    // Try WebSocket first, fall back to REST API
+    const wsSent = _wsConnected && _wsSend({
+        type: 'send',
+        conversation_id: convId,
+        content: msgContent,
+        type,
+        reply_to_id: window.appState.replyingTo ? window.appState.replyingTo.id : null,
+        client_msg_id: clientMsgId,
+    });
+
+    if (wsSent) {
+        // Don't confirm via REST — WS will confirm
+        _isSending = false;
+        return;
+    }
 
     try {
         const res = await api('/chat/send', { method: 'POST', body: reqBody });
@@ -559,6 +814,8 @@ function scrollToBottom(smooth = false) {
     document.getElementById('scrollBottomBtn')?.classList.remove('show');
     const badge = document.getElementById('scrollBottomBadge');
     if (badge) { badge.classList.add('hidden'); badge.textContent = '0'; }
+    // Clear auto-hide timer
+    clearTimeout(window._scrollBadgeTimer);
 }
 
 function _isAtBottom() {
@@ -574,6 +831,13 @@ function _showScrollBadge(count) {
     badge.textContent = (parseInt(badge.textContent || '0') + count).toString();
     badge.classList.remove('hidden');
     btn.classList.add('show');
+
+    // Auto-hide badge after 5 seconds of inactivity
+    clearTimeout(window._scrollBadgeTimer);
+    window._scrollBadgeTimer = setTimeout(() => {
+        badge.classList.add('hidden');
+        badge.textContent = '0';
+    }, 5000);
 }
 
 // ─────────────────────────────────────────
@@ -652,11 +916,12 @@ function _replaceTempMessage(tempId, serverMsg) {
     const el = document.getElementById(`msg_${tempId}`);
     if (el) {
         el.id = `msg_${serverMsg.id}`;
-        // Update tick to delivered
+        el.dataset.msgId = serverMsg.id;
+        // Server confirmed receipt — transition to 'sent' (single tick)
         const tick = el.querySelector('.message-ticks');
         if (tick) {
-            tick.className = 'message-ticks delivered';
-            tick.innerHTML = _tickSVG('delivered');
+            tick.className = 'message-ticks sent';
+            tick.innerHTML = _tickSVG('sent');
         }
     }
 }
@@ -699,11 +964,30 @@ function _updateHeader(user) {
     const avatarEl = document.getElementById('chatHeaderAvatar');
     const statusEl = document.getElementById('chatHeaderStatus');
 
-    if (nameEl) nameEl.textContent = user.display_name || user.username;
-    if (avatarEl) avatarEl.innerHTML = createAvatar(user);
-    if (statusEl) {
-        statusEl.textContent = user.status === 'online' ? 'online' : 'last seen recently';
-        statusEl.className = `chat-header-status${user.status === 'online' ? ' online' : ''}`;
+    const isGroup = window.appState.activeGroupInfo?.isGroup;
+
+    if (isGroup) {
+        if (nameEl) nameEl.textContent = window.appState.activeGroupInfo?.name || 'Group';
+        if (avatarEl) avatarEl.innerHTML = '<div class="avatar avatar--md avatar--group">G</div>';
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.className = 'chat-header-status';
+        }
+    } else if (user) {
+        if (nameEl) nameEl.textContent = user.display_name || user.username;
+        if (avatarEl) avatarEl.innerHTML = createAvatar(user);
+        if (statusEl) {
+            if (user.status === 'online') {
+                statusEl.textContent = 'online';
+                statusEl.className = 'chat-header-status online';
+            } else if (user.last_seen) {
+                statusEl.textContent = _formatLastSeen(user.last_seen);
+                statusEl.className = 'chat-header-status';
+            } else {
+                statusEl.textContent = 'offline';
+                statusEl.className = 'chat-header-status';
+            }
+        }
     }
 }
 
@@ -727,11 +1011,21 @@ function _formatLastSeen(ts) {
     if (!ts) return 'a while ago';
     const d = new Date(ts);
     const now = new Date();
-    const diffMin = Math.floor((now - d) / 60000);
+    const diffMs = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
     if (diffMin < 1) return 'just now';
-    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffMin < 60) return `${diffMin} min ago`;
     const diffH = Math.floor(diffMin / 60);
-    if (diffH < 24) return `${diffH}h ago`;
+    if (diffH < 24 && d.getDate() === now.getDate()) {
+        return `today at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    const diffDays = Math.floor(diffH / 24);
+    if (diffDays === 1 || (diffDays < 2 && d.getDate() !== now.getDate())) {
+        return `yesterday at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    if (diffDays < 7) {
+        return `${d.toLocaleDateString([], { weekday: 'long' })} at ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    }
     return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
@@ -781,6 +1075,9 @@ function _playSound() {
 }
 
 function _tickSVG(status) {
+    if (status === 'sending') {
+        return '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6" stroke-dasharray="28" stroke-dashoffset="8" class="tick-spinner"/></svg>';
+    }
     if (status === 'sent') {
         return '<svg viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 6 10 14 2"/></svg>';
     }
@@ -850,25 +1147,36 @@ function _bindPanelHandlers() {
         document.getElementById('infoName').textContent = user.display_name;
         document.getElementById('infoUsername').textContent = '@' + user.username;
         document.getElementById('infoAbout').textContent = user.about || 'Available';
-        document.getElementById('userInfoPanel')?.classList.add('show');
+        const panel = document.getElementById('userInfoPanel');
+        if (panel) { panel.style.display = 'flex'; panel.classList.add('show'); }
     });
     document.getElementById('closeUserInfoBtn')?.addEventListener('click', () => {
-        document.getElementById('userInfoPanel')?.classList.remove('show');
+        const panel = document.getElementById('userInfoPanel');
+        if (panel) { panel.classList.remove('show'); setTimeout(() => { panel.style.display = 'none'; }, 300); }
     });
     document.getElementById('backToSidebarBtn')?.addEventListener('click', () => {
         document.getElementById('sidebar')?.classList.remove('hidden-mobile');
+        // Hide active chat, show empty state
+        document.getElementById('activeChatView')?.classList.add('hidden');
+        document.getElementById('chatEmpty')?.classList.remove('hidden');
         // Reset active conversation so badges and notifications work correctly
         _stopPolling();
         window.appState.activeConversationId = null;
+        window.appState.activeOtherUser = null;
         if (typeof renderConversations === 'function') renderConversations();
     });
 }
 
-// Stop polling when leaving page
-window.addEventListener('beforeunload', _stopPolling);
+// Stop polling / WS when leaving page
+window.addEventListener('beforeunload', () => {
+    _stopPolling();
+    _disconnectWs();
+});
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && window.appState.activeConversationId) {
-        _poll(); // immediate catch-up when tab becomes visible
+        if (!_wsConnected) {
+            _poll(); // immediate catch-up when tab becomes visible
+        }
     }
 });
 
@@ -931,12 +1239,15 @@ function _bindMessageSearchHandlers() {
     if (!toggleBtn || !searchBar) return;
 
     toggleBtn.addEventListener('click', () => {
-        if (searchBar.style.display === 'none') {
+        const isVisible = searchBar.dataset.open === 'true';
+        if (!isVisible) {
             searchBar.style.display = 'flex';
+            searchBar.dataset.open = 'true';
             searchInput.focus();
         } else {
             searchBar.style.display = 'none';
-            searchResults.style.display = 'none';
+            searchBar.dataset.open = 'false';
+            if (searchResults) searchResults.style.display = 'none';
             searchInput.value = '';
         }
     });

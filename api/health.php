@@ -1,37 +1,60 @@
 <?php
 /**
- * GET /api/health.php
- * System health check for monitoring tools
+ * GET /api/health
+ * Health check endpoint for load balancers and monitoring.
+ * Returns 200 if the application is healthy.
  */
-require_once __DIR__ . '/bootstrap.php';
 
-$status = [
-    'status'    => 'ok',
-    'timestamp' => date('Y-m-d H:i:s'),
-    'services'  => [
-        'database' => 'unknown',
-        'storage'  => 'unknown'
-    ]
-];
+header('Content-Type: application/json');
 
-// Check Database
 try {
-    $db = Database::getInstance();
-    $db->query("SELECT 1");
-    $status['services']['database'] = 'ok';
-} catch (Exception $e) {
-    $status['status'] = 'error';
-    $status['services']['database'] = 'error: ' . $e->getMessage();
-}
+    // Load minimal dependencies
+    require_once __DIR__ . '/../vendor/autoload.php';
+    
+    if (file_exists(__DIR__ . '/../.env')) {
+        $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+        $dotenv->load();
+    }
 
-// Check Storage (logs directory)
-$logDir = BASE_PATH . '/logs';
-if (is_dir($logDir) && is_writable($logDir)) {
-    $status['services']['storage'] = 'ok';
-} else {
-    $status['status'] = 'error';
-    $status['services']['storage'] = 'error: logs directory not writable';
-}
+    $health = [
+        'status' => 'healthy',
+        'timestamp' => date('c'),
+        'version' => '1.0.0',
+        'checks' => [],
+    ];
 
-$code = ($status['status'] === 'ok') ? 200 : 503;
-Response::success($status, 'System Health Report', $code);
+    // Check database connectivity
+    try {
+        require_once __DIR__ . '/../config/database.php';
+        $db = Database::getInstance();
+        $db->query("SELECT 1");
+        $health['checks']['database'] = 'ok';
+    } catch (\Throwable $e) {
+        $health['checks']['database'] = 'error: ' . $e->getMessage();
+        $health['status'] = 'degraded';
+    }
+
+    // Check Redis connectivity (optional)
+    if (!empty($_ENV['REDIS_HOST'])) {
+        try {
+            require_once __DIR__ . '/../includes/RedisClient.php';
+            $redis = RedisClient::getInstance();
+            $health['checks']['redis'] = $redis->isConnected() ? 'ok' : 'disconnected';
+        } catch (\Throwable $e) {
+            $health['checks']['redis'] = 'error: ' . $e->getMessage();
+            // Redis is optional, don't degrade health
+        }
+    }
+
+    $statusCode = $health['status'] === 'healthy' ? 200 : 503;
+    http_response_code($statusCode);
+    echo json_encode($health);
+
+} catch (\Throwable $e) {
+    http_response_code(503);
+    echo json_encode([
+        'status' => 'unhealthy',
+        'error' => 'Health check failed',
+        'timestamp' => date('c'),
+    ]);
+}

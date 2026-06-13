@@ -1,57 +1,102 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
-    <meta name="description" content="PrimeChat">
-    <title>PrimeChat</title>
-    <!-- Google Font Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/app.css">
-    <style>
-        .splash-logo {
-            animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: .7; transform: scale(0.95); }
-        }
-        .fade-out {
-            opacity: 0;
-            transition: opacity 0.5s ease-out;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>PrimeChat</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+  <style>
+    body {
+      overflow: hidden;
+      background: #08080d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100dvh;
+    }
+    .splash {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      animation: splashEnter 600ms cubic-bezier(0.16,1,0.3,1) both;
+    }
+    @keyframes splashEnter {
+      from { opacity: 0; transform: translateY(12px) scale(0.96); }
+      to   { opacity: 1; transform: none; }
+    }
+    .splash-mark {
+      width: 72px;
+      height: 72px;
+      border-radius: 22px;
+      background: linear-gradient(145deg, #7c6af5, #9d8eff);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 28px rgba(124,106,245,0.30),
+                  0 2px 8px rgba(0,0,0,0.3);
+    }
+    .splash-mark svg { width: 34px; height: 34px; color: #fff; }
+    .splash-name {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: #eeeef5;
+    }
+    .splash-name span { color: #9d8eff; }
+    .splash-progress {
+      width: 40px;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .splash-progress-bar {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #7c6af5, #9d8eff);
+      border-radius: 999px;
+      animation: splashBar 700ms cubic-bezier(0.16,1,0.3,1) 200ms both;
+    }
+    @keyframes splashBar {
+      from { width: 0%; }
+      to   { width: 100%; }
+    }
+  </style>
 </head>
-<body class="bg-bg-primary flex flex-col items-center justify-center min-h-[100dvh] overflow-hidden m-0">
-
-    <div id="splashContainer" class="flex flex-col items-center transition-opacity duration-500">
-        <!-- V3 Minimalist Icon -->
-        <div class="w-20 h-20 rounded-2xl flex items-center justify-center bg-bg-tertiary border border-border text-accent splash-logo shadow-lg">
-            <svg class="w-10 h-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-            </svg>
-        </div>
-        <h1 class="mt-6 text-2xl font-bold tracking-tight text-primary font-heading">PrimeChat</h1>
+<body>
+  <div class="splash">
+    <div class="splash-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
     </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => {
-                const container = document.getElementById('splashContainer');
-                container.classList.add('fade-out');
-                
-                setTimeout(() => {
-                    const token = localStorage.getItem('token');
-                    if (token) {
-                        window.location.href = '/chat';
-                    } else {
-                        window.location.href = '/onboarding';
-                    }
-                }, 500); // Wait for fade out
-            }, 1200); // Show splash for 1.2s
+    <div class="splash-name">Prime<span>Chat</span></div>
+    <div class="splash-progress">
+      <div class="splash-progress-bar"></div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const user = localStorage.getItem('user');
+      const token = localStorage.getItem('token');
+      if (user && token) {
+        fetch('/api/auth/profile', {
+          headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/json' }
+        }).then(r => {
+          window.location.href = r.ok ? '/chat' : '/onboarding';
+        }).catch(() => {
+          window.location.href = '/onboarding';
         });
-    </script>
+      } else {
+        setTimeout(() => { window.location.href = '/onboarding'; }, 820);
+      }
+    })();
+  </script>
 </body>
 </html>

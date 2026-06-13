@@ -103,6 +103,7 @@ window._appendMessages = (msgs, container, isBatch = false) => {
     // Cache last date/sender from DOM once (not per-message)
     let lastDate   = _lastRenderedDate(container);
     let lastSender = _lastRenderedSender(container);
+    let lastTime   = _lastRenderedTime(container);
 
     // Remove typing bubble temporarily
     const typingBubble = document.getElementById('typingBubble');
@@ -115,10 +116,16 @@ window._appendMessages = (msgs, container, isBatch = false) => {
         const msg = msgs[i];
         const msgDate = _dateKey(msg.created_at);
 
+        // Calculate time gap from previous message
+        if (lastTime && msg.created_at) {
+            msg._timeGapFromPrev = new Date(msg.created_at) - new Date(lastTime);
+        }
+
         if (msgDate !== lastDate) {
             frag.appendChild(_makeDateDivider(_friendlyDate(msg.created_at), msgDate));
             lastDate   = msgDate;
             lastSender = null;
+            lastTime   = null;
         }
 
         const bubble = _buildBubble(msg, lastSender === msg.sender_id);
@@ -126,6 +133,7 @@ window._appendMessages = (msgs, container, isBatch = false) => {
         if (isBatch) bubble.classList.add('no-anim');
         frag.appendChild(bubble);
         lastSender = msg.sender_id;
+        lastTime = msg.created_at;
         _domMsgCount++;
     }
 
@@ -146,23 +154,31 @@ window._prependMessages = (msgs) => {
     const frag = document.createDocumentFragment();
     let lastDate   = null;
     let lastSender = null;
+    let lastTime   = null;
 
     for (let i = 0; i < msgs.length; i++) {
         const msg     = msgs[i];
         const msgDate = _dateKey(msg.created_at);
 
+        // Calculate time gap from previous message in this batch
+        if (lastTime && msg.created_at) {
+            msg._timeGapFromPrev = new Date(msg.created_at) - new Date(lastTime);
+        }
+
         if (msgDate !== lastDate) {
             frag.appendChild(_makeDateDivider(_friendlyDate(msg.created_at), msgDate));
             lastDate   = msgDate;
             lastSender = null;
+            lastTime   = null;
         }
 
         frag.appendChild(_buildBubble(msg, lastSender === msg.sender_id));
         lastSender = msg.sender_id;
+        lastTime = msg.created_at;
         _domMsgCount++;
     }
 
-    // Group-merge junction: check if last prepended & first existing share sender+date
+    // Group-merge junction: check if last prepended & first existing share sender+date+time gap
     const firstExisting = container.querySelector('.message[data-msg-id]');
     if (firstExisting) {
         const firstMsg       = window.appState.messages.find(m => m.id == firstExisting.dataset.msgId);
@@ -170,7 +186,11 @@ window._prependMessages = (msgs) => {
         if (firstMsg && lastPrepended &&
             firstMsg.sender_id === lastPrepended.sender_id &&
             _dateKey(firstMsg.created_at) === _dateKey(lastPrepended.created_at)) {
-            firstExisting.classList.add('grouped');
+            // Also check time gap at the junction
+            const gapMs = new Date(firstMsg.created_at) - new Date(lastPrepended.created_at);
+            if (gapMs <= 300000) { // 5 minutes
+                firstExisting.classList.add('grouped');
+            }
         }
 
         // Remove duplicate date divider at junction
@@ -233,12 +253,20 @@ function _pruneDOM(container, direction = 'top') {
 // ─────────────────────────────────────────
 function _buildBubble(msg, isGrouped) {
     const wrap = document.createElement('div');
-    wrap.className = `message ${msg.is_mine ? 'sent' : 'received'}${isGrouped ? ' grouped' : ''}`;
+    // Also break grouping if time gap > 5 minutes from previous message
+    const finalGrouped = isGrouped && msg._timeGapFromPrev != null ? msg._timeGapFromPrev <= 300000 : isGrouped;
+    wrap.className = `message ${msg.is_mine ? 'sent' : 'received'}${finalGrouped ? ' grouped' : ''}`;
     wrap.id        = `msg_${msg.id}`;
     wrap.dataset.msgId = msg.id;
 
     const bubble = document.createElement('div');
     bubble.className = 'message-bubble';
+
+    // Show sender name for group conversations (non-self messages)
+    const isGroup = window.appState.activeGroupInfo?.isGroup;
+    if (isGroup && !msg.is_mine && !isGrouped && msg.sender_name) {
+        bubble.appendChild(_el('div', 'message-sender-name', escapeHTML(msg.sender_name)));
+    }
 
     // Forwarded label
     if (msg.forwarded_from_id) {
@@ -285,6 +313,38 @@ function _buildBubble(msg, isGrouped) {
     }
 
     bubble.appendChild(meta);
+
+    // Reactions
+    if (msg.reactions && msg.reactions.length > 0) {
+        const reactionsRow = document.createElement('div');
+        reactionsRow.className = 'message-reactions';
+        reactionsRow.dataset.msgId = msg.id;
+        msg.reactions.forEach(r => {
+            const pill = document.createElement('span');
+            pill.className = `reaction-pill${r.m ? ' reacted' : ''}`;
+            pill.dataset.emoji = r.e;
+            pill.textContent = `${r.e} ${r.c}`;
+            pill.addEventListener('click', (e) => {
+                e.stopPropagation();
+                _toggleReaction(msg.id, r.e);
+            });
+            reactionsRow.appendChild(pill);
+        });
+        bubble.appendChild(reactionsRow);
+    }
+
+    // Add reaction button (delegated click in _handleDocClick)
+    if (!msg.is_deleted_for_everyone) {
+        const addReactionBtn = document.createElement('div');
+        addReactionBtn.className = 'msg-add-reaction';
+        addReactionBtn.dataset.msgId = msg.id;
+        addReactionBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
+        addReactionBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            _showReactionPicker(e, msg.id);
+        });
+        bubble.appendChild(addReactionBtn);
+    }
 
     // Action button (delegated click in _handleDocClick)
     if (!msg.is_deleted_for_everyone) {
@@ -388,11 +448,16 @@ function _showContextMenu(e, msg) {
     const menu = document.getElementById('messageContextMenu');
     if (!menu) return;
 
-    document.getElementById('menuEdit').style.display           = msg.is_mine ? 'flex' : 'none';
+    document.getElementById('menuEdit').style.display           = msg.is_mine && msg.type === 'text' ? 'flex' : 'none';
     document.getElementById('menuDeleteEveryone').style.display  = msg.is_mine ? 'flex' : 'none';
+    // Show "View History" for messages that have been edited
+    const historyItem = document.getElementById('menuViewHistory');
+    if (historyItem) {
+        historyItem.style.display = (msg.is_mine && msg.is_edited) ? 'flex' : 'none';
+    }
 
-    const x = Math.min(e.clientX, window.innerWidth  - 200);
-    const y = Math.min(e.clientY, window.innerHeight - 200);
+    const x = Math.min(e.clientX, window.innerWidth  - 220);
+    const y = Math.min(e.clientY, window.innerHeight - 240);
     menu.style.left = x + 'px';
     menu.style.top  = y + 'px';
     menu.classList.remove('hidden');
@@ -408,6 +473,27 @@ function _bindContextMenuActions() {
         if (_ctxMsg) replyToMessage(_ctxMsg.id);
         _hideContextMenu();
     });
+
+    // Edit message — enter inline edit mode
+    document.getElementById('menuEdit')?.addEventListener('click', async () => {
+        if (!_ctxMsg || _ctxMsg.type !== 'text') return;
+        _hideContextMenu();
+        _enterEditMode(_ctxMsg);
+    });
+
+    // View edit history
+    document.getElementById('menuViewHistory')?.addEventListener('click', async () => {
+        if (!_ctxMsg) return;
+        const msg = _ctxMsg;
+        _hideContextMenu();
+        await window._ensureHistory?.();
+        if (window.EditHistory) {
+            window.EditHistory.showEditHistory(msg.id, msg.content);
+        } else {
+            showToast('History not available', 'info');
+        }
+    });
+
     document.getElementById('menuDeleteMe')?.addEventListener('click', async () => {
         if (!_ctxMsg) return;
         await _deleteMessage(_ctxMsg.id, 'for_me');
@@ -419,8 +505,124 @@ function _bindContextMenuActions() {
         _hideContextMenu();
     });
     document.getElementById('menuForward')?.addEventListener('click', () => {
-        showToast('Forward coming soon');
+        if (_ctxMsg) _showForwardModal(_ctxMsg.id);
         _hideContextMenu();
+    });
+}
+
+// ─────────────────────────────────────────
+// INLINE EDIT MODE
+// ─────────────────────────────────────────
+function _enterEditMode(msg) {
+    const el = document.getElementById(`msg_${msg.id}`);
+    if (!el) return;
+
+    const textEl = el.querySelector('.message-text');
+    if (!textEl) return;
+
+    const originalContent = msg.content;
+
+    // Record old content BEFORE edit (for history diff)
+    window._ensureHistory?.().then(() => {
+        window.EditHistory?.beforeEdit(msg.id, originalContent);
+    });
+
+    // Build inline editor
+    const editContainer = document.createElement('div');
+    editContainer.className = 'msg-edit-container';
+    editContainer.innerHTML = `
+        <textarea class="msg-edit-input" rows="1">${escapeHTML(originalContent)}</textarea>
+        <div class="msg-edit-actions">
+            <button class="btn btn--ghost msg-edit-cancel" style="font-size:12px;height:28px;padding:0 10px;">Cancel</button>
+            <button class="btn btn--primary msg-edit-save" style="font-size:12px;height:28px;padding:0 10px;">Save</button>
+        </div>
+    `;
+
+    textEl.replaceWith(editContainer);
+
+    const textarea = editContainer.querySelector('.msg-edit-input');
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+    // Auto-resize
+    textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    });
+
+    // Cancel
+    editContainer.querySelector('.msg-edit-cancel').addEventListener('click', () => {
+        const restored = document.createElement('span');
+        restored.className = 'message-text';
+        restored.innerHTML = linkifyContent(originalContent);
+        editContainer.replaceWith(restored);
+    });
+
+    // Save
+    editContainer.querySelector('.msg-edit-save').addEventListener('click', async () => {
+        const newContent = textarea.value.trim();
+        if (!newContent || newContent === originalContent) {
+            editContainer.querySelector('.msg-edit-cancel').click();
+            return;
+        }
+
+        const saveBtn = editContainer.querySelector('.msg-edit-save');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner spinner--sm"></span>';
+
+        try {
+            const res = await api('/chat/edit', {
+                method: 'POST',
+                body: { message_id: msg.id, content: newContent },
+            });
+
+            if (res?.success) {
+                // Record edit in history
+                window._ensureHistory?.().then(() => {
+                    window.EditHistory?.afterEdit(msg.id, newContent);
+                });
+
+                // Update DOM
+                const textNode = document.createElement('span');
+                textNode.className = 'message-text';
+                textNode.innerHTML = linkifyContent(newContent);
+                editContainer.replaceWith(textNode);
+
+                // Update appState
+                const stateMsg = window.appState.messages.find(m => m.id === msg.id);
+                if (stateMsg) { stateMsg.content = newContent; stateMsg.is_edited = true; }
+
+                // Add/update 'edited' indicator
+                const metaEl = el.querySelector('.message-meta');
+                if (metaEl && !metaEl.querySelector('.message-edited')) {
+                    const editedSpan = document.createElement('span');
+                    editedSpan.className = 'message-edited';
+                    editedSpan.textContent = 'edited';
+                    metaEl.prepend(editedSpan);
+                }
+
+                showToast('Message edited', 'success');
+            } else {
+                showToast(res?.error || 'Edit failed', 'error');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save';
+            }
+        } catch (e) {
+            showToast('Edit failed', 'error');
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save';
+        }
+    });
+
+    // Keyboard shortcuts
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') editContainer.querySelector('.msg-edit-cancel').click();
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            editContainer.querySelector('.msg-edit-save').click();
+        }
     });
 }
 
@@ -562,6 +764,107 @@ function _toggleVoice(btn) {
 }
 
 // ─────────────────────────────────────────
+// REACTIONS
+// ─────────────────────────────────────────
+
+const REACTION_EMOJIS = ['👍', '❤️', '😄', '😮', '😢', '🙏'];
+
+let _reactionPickerEl = null;
+
+async function _toggleReaction(msgId, emoji) {
+    try {
+        const res = await api('/chat/react', {
+            method: 'POST',
+            body: { message_id: msgId, emoji }
+        });
+        if (res?.success) {
+            // Update reactions in appState
+            const msg = window.appState.messages.find(m => m.id === msgId);
+            if (msg) {
+                msg.reactions = res.data.reactions;
+                // Re-build reactions row for this message
+                _updateReactionsRow(msgId, res.data.reactions);
+            }
+        }
+    } catch (e) {
+        console.error('[PrimeChat] Reaction failed:', e);
+    }
+}
+
+function _showReactionPicker(e, msgId) {
+    _hideReactionPicker();
+
+    _reactionPickerEl = document.createElement('div');
+    _reactionPickerEl.className = 'reaction-picker';
+    _reactionPickerEl.style.position = 'fixed';
+    _reactionPickerEl.style.left = Math.min(e.clientX, window.innerWidth - 260) + 'px';
+    _reactionPickerEl.style.top = (e.clientY - 50) + 'px';
+
+    REACTION_EMOJIS.forEach(emoji => {
+        const btn = document.createElement('button');
+        btn.className = 'reaction-picker-btn';
+        btn.textContent = emoji;
+        btn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            _toggleReaction(msgId, emoji);
+            _hideReactionPicker();
+        });
+        _reactionPickerEl.appendChild(btn);
+    });
+
+    document.body.appendChild(_reactionPickerEl);
+
+    // Close on outside click
+    setTimeout(() => {
+        document.addEventListener('click', _hideReactionPicker, { once: true });
+    }, 0);
+}
+
+function _hideReactionPicker() {
+    if (_reactionPickerEl) {
+        _reactionPickerEl.remove();
+        _reactionPickerEl = null;
+    }
+}
+
+function _updateReactionsRow(msgId, reactions) {
+    const msgEl = document.querySelector(`.message[data-msg-id="${msgId}"]`);
+    if (!msgEl) return;
+
+    const bubble = msgEl.querySelector('.message-bubble');
+    if (!bubble) return;
+
+    // Remove old reactions row
+    const oldRow = bubble.querySelector('.message-reactions');
+    if (oldRow) oldRow.remove();
+
+    // Add new reactions row
+    if (reactions && reactions.length > 0) {
+        const reactionsRow = document.createElement('div');
+        reactionsRow.className = 'message-reactions';
+        reactionsRow.dataset.msgId = msgId;
+        reactions.forEach(r => {
+            const pill = document.createElement('span');
+            pill.className = `reaction-pill${r.m ? ' reacted' : ''}`;
+            pill.dataset.emoji = r.e;
+            pill.textContent = `${r.e} ${r.c}`;
+            pill.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                _toggleReaction(msgId, r.e);
+            });
+            reactionsRow.appendChild(pill);
+        });
+        // Insert before the add-reaction button
+        const addBtn = bubble.querySelector('.msg-add-reaction');
+        if (addBtn) {
+            bubble.insertBefore(reactionsRow, addBtn);
+        } else {
+            bubble.appendChild(reactionsRow);
+        }
+    }
+}
+
+// ─────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────
 function _el(tag, cls, html = '') {
@@ -621,6 +924,9 @@ function _formatMsgTime(ts) {
 }
 
 function _tickSVG(status) {
+    if (status === 'sending') {
+        return `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6" stroke-dasharray="28" stroke-dashoffset="8" class="tick-spinner"/></svg>`;
+    }
     if (status === 'sent') {
         return `<svg viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 6 6 10 14 2"/></svg>`;
     }
@@ -649,3 +955,103 @@ function _lastRenderedSender(container) {
     }
     return null;
 }
+
+function _lastRenderedTime(container) {
+    let node = container.lastChild;
+    while (node) {
+        if (node.dataset?.msgId) {
+            const msg = window.appState.messages.find(m => m.id == node.dataset.msgId);
+            return msg?.created_at ?? null;
+        }
+        node = node.previousSibling;
+    }
+    return null;
+}
+
+// ─────────────────────────────────────────
+// FORWARD MESSAGE
+// ─────────────────────────────────────────
+let _forwardMsgId = null;
+
+function _showForwardModal(messageId) {
+    _forwardMsgId = messageId;
+    const modal = document.getElementById('forwardModal');
+    const list = document.getElementById('forwardConvList');
+    if (!modal || !list) return;
+
+    const convs = (window.appState.conversations || [])
+        .filter(c => c.conversation_id !== window.appState.activeConversationId);
+
+    _renderForwardList(convs);
+    modal.style.display = 'flex';
+
+    document.getElementById('forwardSearchInput').value = '';
+    document.getElementById('forwardSearchInput').focus();
+}
+
+function _renderForwardList(convs) {
+    const list = document.getElementById('forwardConvList');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (!convs.length) {
+        list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--color-text-tertiary);font-size:13px;">No conversations to forward to</div>';
+        return;
+    }
+
+    const frag = document.createDocumentFragment();
+    convs.forEach(conv => {
+        const user = conv.other_user;
+        const name = conv.type === 'group' ? (conv.name || 'Group') : (user?.display_name || 'Unknown');
+        const item = document.createElement('div');
+        item.className = 'forward-conversation-item';
+        item.innerHTML = `
+            <div class="avatar avatar--sm">${createAvatar(user || { display_name: name }, 'avatar--sm')}</div>
+            <span style="font-size:14px;font-weight:500;">${escapeHTML(name)}</span>`;
+        item.addEventListener('click', () => _doForward(conv.conversation_id));
+        frag.appendChild(item);
+    });
+    list.appendChild(frag);
+}
+
+async function _doForward(targetConvId) {
+    if (!_forwardMsgId) return;
+    const modal = document.getElementById('forwardModal');
+    if (modal) modal.style.display = 'none';
+
+    try {
+        const res = await api('/chat/forward', {
+            method: 'POST',
+            body: { message_id: _forwardMsgId, target_conversation_id: targetConvId }
+        });
+        if (res?.success) {
+            showToast('Message forwarded', 'success');
+        } else {
+            showToast(res?.error || 'Failed to forward', 'error');
+        }
+    } catch (e) {
+        showToast('Failed to forward message', 'error');
+    }
+    _forwardMsgId = null;
+}
+
+// Forward modal event bindings
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('forwardCancelBtn')?.addEventListener('click', () => {
+        const modal = document.getElementById('forwardModal');
+        if (modal) modal.style.display = 'none';
+        _forwardMsgId = null;
+    });
+
+    document.getElementById('forwardSearchInput')?.addEventListener('input', function () {
+        const q = this.value.toLowerCase().trim();
+        const convs = (window.appState.conversations || [])
+            .filter(c => c.conversation_id !== window.appState.activeConversationId)
+            .filter(c => {
+                if (!q) return true;
+                const name = c.type === 'group' ? (c.name || '') : (c.other_user?.display_name || '');
+                return name.toLowerCase().includes(q);
+            });
+        _renderForwardList(convs);
+    });
+});

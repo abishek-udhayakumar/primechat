@@ -23,6 +23,9 @@ window.initProfile = () => {
         populateProfileData();
     };
     
+    // Expose so app.js can call after lazy-load without re-clicking
+    window.openProfile = openProfile;
+
     // Bind open to trigger
     document.getElementById('sidebarProfileTrigger')?.addEventListener('click', openProfile);
     
@@ -62,7 +65,7 @@ window.initProfile = () => {
             formData.append('avatar', file);
 
             try {
-                const res = await api('/auth/update_profile.php', { method: 'POST', body: formData });
+                const res = await api('/auth/update_profile', { method: 'POST', body: formData });
                 if (res && res.success) {
                     window.appState.user = res.data.user;
                     localStorage.setItem('user', JSON.stringify(res.data.user));

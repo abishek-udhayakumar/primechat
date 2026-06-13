@@ -211,13 +211,18 @@ const Notifier = (() => {
 
     function _remapConv(c) {
         if (!c || c._remapped) return c;
-        return {
+        const mapped = {
             conversation_id: c.i,
-            unread_count: c.uc,
-            other_user: { display_name: c.u.n, id: c.u.i, status: c.u.s },
-            last_message: { type: c.m.ty, content: c.m.c },
+            type: c.t || 'direct',
+            name: c.n || null,
+            unread_count: c.uc ?? 0,
+            last_message: c.m ? { type: c.m.ty, content: c.m.c, sender_id: c.m.si } : null,
             _remapped: true
         };
+        if (c.u) {
+            mapped.other_user = { display_name: c.u.n, id: c.u.i, status: c.u.s };
+        }
+        return mapped;
     }
 
     // ── Public API ──
@@ -230,12 +235,13 @@ const Notifier = (() => {
         // Attach to the document body exactly once
         if ('Notification' in window && Notification.permission === 'default') {
             const requestPerm = () => {
-                Notification.requestPermission().then(p => { _permission = p; });
+                Notification.requestPermission().then(p => { _permission = p; _subscribePush(); });
                 document.body.removeEventListener('click', requestPerm);
             };
             document.body.addEventListener('click', requestPerm, { once: true });
         } else if ('Notification' in window) {
             _permission = Notification.permission;
+            if (_permission === 'granted') _subscribePush();
         }
 
         // Baseline: capture current unreads WITHOUT firing notifications
@@ -262,6 +268,54 @@ const Notifier = (() => {
         _pollTimeout = null;
         _started = false;
         _updateTitle(0);
+    }
+
+    /** Subscribe to push notifications via service worker */
+    async function _subscribePush() {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            let sub = await reg.pushManager.getSubscription();
+
+            if (!sub) {
+                // Get VAPID public key from a meta tag or fetch from server
+                const vapidKeyEl = document.querySelector('meta[name="vapid-public-key"]');
+                const vapidPublicKey = vapidKeyEl?.content;
+
+                if (!vapidPublicKey) return; // VAPID not configured
+
+                const applicationServerKey = _urlBase64ToUint8Array(vapidPublicKey);
+                sub = await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey,
+                });
+            }
+
+            if (sub) {
+                // Send subscription to server
+                const subscriptionData = sub.toJSON();
+                await api('/push/subscribe', {
+                    method: 'POST',
+                    body: subscriptionData,
+                }).catch(() => {});
+            }
+        } catch (e) {
+            console.warn('[Push] Subscription failed:', e);
+        }
+    }
+
+    /** Convert VAPID public key from base64url to Uint8Array */
+    function _urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding)
+            .replace(/-/g, '+')
+            .replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
     }
 
     /** Call when user opens a conversation — resets its baseline */

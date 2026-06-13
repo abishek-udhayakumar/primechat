@@ -45,7 +45,7 @@ class Auth {
         // Validate password
         $password = $data['password'] ?? '';
         if (!Sanitizer::isValidPassword($password)) {
-            $errors[] = 'Password must be at least 6 characters';
+            $errors[] = 'Password must be at least 12 characters with uppercase, lowercase, and numbers';
         }
 
         // Validate phone (optional)
@@ -208,5 +208,16 @@ class Auth {
      */
     public function getCsrfToken(): ?string {
         return $_SESSION['csrf_token'] ?? null;
+    }
+
+    /**
+     * Regenerate session ID for security (privilege change, sensitive operation).
+     * Prevents session fixation attacks.
+     */
+    public function regenerateSession(): void {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        session_regenerate_id(true);
     }
 }
