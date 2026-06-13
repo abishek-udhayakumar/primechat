@@ -81,6 +81,19 @@ if (isset($routes[$uri])) {
     $viewFile = BASE_PATH . $routes[$uri];
     
     if (file_exists($viewFile)) {
+        // Check that config files exist — show setup page if missing
+        $missingConfig = [];
+        foreach (['/config/app.php', '/config/database.php', '/config/session.php'] as $cfg) {
+            if (!file_exists(BASE_PATH . $cfg)) $missingConfig[] = $cfg;
+        }
+        if (!empty($missingConfig)) {
+            http_response_code(503);
+            header('Content-Type: text/html; charset=UTF-8');
+            $list = implode(', ', $missingConfig);
+            echo '<!DOCTYPE html><html><head><title>Setup Required</title><style>body{font-family:system-ui;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0;background:#0a0a0a;color:#e5e5e5}.box{background:#1a1a1a;padding:2rem;border-radius:12px;border:1px solid #333;max-width:500px;text-align:center}h2{color:#f97316;margin-top:0}code{background:#111;padding:2px 6px;border-radius:4px}pre{text-align:left;background:#111;padding:1rem;border-radius:8px;overflow-x:auto;font-size:13px}</style></head><body><div class="box"><h2>Setup Required</h2><p>Missing config files: <code>' . htmlspecialchars($list) . '</code></p><pre>bash scripts/setup.sh</pre><p>Then edit <code>config/database.php</code> and <code>.env</code> with your credentials.</p></div></body></html>';
+            exit;
+        }
+
         require_once BASE_PATH . '/config/app.php';
         require_once BASE_PATH . '/config/database.php';
         require_once BASE_PATH . '/config/session.php';

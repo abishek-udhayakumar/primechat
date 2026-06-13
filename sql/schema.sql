@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS messages (
     INDEX idx_conv_id (conversation_id, id),
     INDEX idx_sender (sender_id),
     INDEX idx_reply (reply_to_id),
-    INDEX idx_messages_client_msg_id (client_msg_id),
+    UNIQUE INDEX idx_messages_client_msg_id (client_msg_id),
     FULLTEXT INDEX ft_messages_content (content),
 
     CONSTRAINT fk_msg_conversation FOREIGN KEY (conversation_id)

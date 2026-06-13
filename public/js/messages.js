@@ -36,6 +36,25 @@ function _handleDocClick(e) {
         return;
     }
 
+    // Reaction pill click (delegated)
+    const reactionPill = e.target.closest('.reaction-pill');
+    if (reactionPill) {
+        e.stopPropagation();
+        const msgId = reactionPill.dataset.msgId;
+        const emoji = reactionPill.dataset.emoji;
+        if (msgId && emoji) _toggleReaction(parseInt(msgId), emoji);
+        return;
+    }
+
+    // Add reaction button click (delegated)
+    const addReactionBtn = e.target.closest('.msg-add-reaction');
+    if (addReactionBtn) {
+        e.stopPropagation();
+        const msgId = addReactionBtn.dataset.msgId;
+        if (msgId) _showReactionPicker(e, parseInt(msgId));
+        return;
+    }
+
     // Reply-to click inside bubble
     const replyDiv = e.target.closest('.message-reply[data-reply-id]');
     if (replyDiv) {
@@ -73,14 +92,17 @@ function _handleDocClick(e) {
 // ─────────────────────────────────────────
 // FULL RENDER — initial load only
 // ─────────────────────────────────────────
-window.renderMessages = () => {
+window.renderMessages = (msgs) => {
     const container = document.getElementById('messagesContainer');
     if (!container) return;
 
     container.innerHTML = '';
     _domMsgCount = 0;
 
-    if (!window.appState.messages.length) {
+    // Use passed messages or fall back to appState
+    const messages = msgs || window.appState.messages;
+
+    if (!messages.length) {
         const other = window.appState.activeOtherUser;
         if (other) {
             container.appendChild(_makeSystemMsg(
@@ -90,7 +112,7 @@ window.renderMessages = () => {
         return;
     }
 
-    _appendMessages(window.appState.messages, container, true); // true = batch/initial
+    _appendMessages(messages, container, true); // true = batch/initial
 };
 
 // ─────────────────────────────────────────
@@ -323,11 +345,9 @@ function _buildBubble(msg, isGrouped) {
             const pill = document.createElement('span');
             pill.className = `reaction-pill${r.m ? ' reacted' : ''}`;
             pill.dataset.emoji = r.e;
+            pill.dataset.msgId = msg.id;
             pill.textContent = `${r.e} ${r.c}`;
-            pill.addEventListener('click', (e) => {
-                e.stopPropagation();
-                _toggleReaction(msg.id, r.e);
-            });
+            // No inline listener — handled by delegated click in _handleDocClick
             reactionsRow.appendChild(pill);
         });
         bubble.appendChild(reactionsRow);
@@ -339,10 +359,7 @@ function _buildBubble(msg, isGrouped) {
         addReactionBtn.className = 'msg-add-reaction';
         addReactionBtn.dataset.msgId = msg.id;
         addReactionBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>';
-        addReactionBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            _showReactionPicker(e, msg.id);
-        });
+        // No inline listener — handled by delegated click in _handleDocClick
         bubble.appendChild(addReactionBtn);
     }
 
@@ -847,11 +864,9 @@ function _updateReactionsRow(msgId, reactions) {
             const pill = document.createElement('span');
             pill.className = `reaction-pill${r.m ? ' reacted' : ''}`;
             pill.dataset.emoji = r.e;
+            pill.dataset.msgId = msgId;
             pill.textContent = `${r.e} ${r.c}`;
-            pill.addEventListener('click', (ev) => {
-                ev.stopPropagation();
-                _toggleReaction(msgId, r.e);
-            });
+            // No inline listener — handled by delegated click in _handleDocClick
             reactionsRow.appendChild(pill);
         });
         // Insert before the add-reaction button

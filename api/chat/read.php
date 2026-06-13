@@ -17,6 +17,12 @@ if ($conversationId <= 0 || $messageId <= 0) {
     Response::error('conversation_id and message_id are required', 422);
 }
 
+// Verify user is a participant of this conversation
+$convModel = new Conversation();
+if (!$convModel->isParticipant($conversationId, $userId)) {
+    Response::error('Access denied', 403);
+}
+
 $chat = new Chat();
 $chat->markAsRead($conversationId, $userId, $messageId);
 

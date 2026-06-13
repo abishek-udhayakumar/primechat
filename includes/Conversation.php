@@ -21,7 +21,7 @@ class Conversation {
             [$userId1, $userId2] = [$userId2, $userId1];
         }
 
-        // Try to find existing conversation
+        // Try to find existing conversation (fast path)
         $stmt = $this->db->query(
             "SELECT conversation_id FROM direct_conversation_lookup
              WHERE user1_id = ? AND user2_id = ?",
@@ -33,7 +33,12 @@ class Conversation {
         }
 
         // Atomic insert with rollback on duplicate (race condition protection)
-        $this->db->beginTransaction();
+        // NOTE: This method should be called within an existing transaction.
+        // If no transaction is active, we begin one for safety.
+        $alreadyInTransaction = $this->db->inTransaction();
+        if (!$alreadyInTransaction) {
+            $this->db->beginTransaction();
+        }
         try {
             $this->db->query(
                 "INSERT INTO conversations (type) VALUES ('direct')"
@@ -50,10 +55,14 @@ class Conversation {
                 [$userId1, $userId2, $convId]
             );
 
-            $this->db->commit();
+            if (!$alreadyInTransaction) {
+                $this->db->commit();
+            }
             return $convId;
         } catch (\Exception $e) {
-            $this->db->rollBack();
+            if (!$alreadyInTransaction) {
+                $this->db->rollBack();
+            }
             // If duplicate key error, another request won the race — fetch the existing one
             if (str_contains($e->getMessage(), 'Duplicate')) {
                 $stmt = $this->db->query(
@@ -193,14 +202,19 @@ class Conversation {
     }
 
     /**
-     * Update last read message ID
+     * Update last read message ID (with validation and regression prevention)
      */
     public function updateLastRead(int $conversationId, int $userId, int $messageId): void {
+        // Validate message belongs to this conversation and prevent regression
         $this->db->query(
             "UPDATE conversation_participants
              SET last_read_message_id = ?, unread_count = 0
-             WHERE conversation_id = ? AND user_id = ?",
-            [$messageId, $conversationId, $userId]
+             WHERE conversation_id = ? AND user_id = ?
+               AND (last_read_message_id IS NULL OR ? > last_read_message_id)
+               AND EXISTS (
+                   SELECT 1 FROM messages WHERE id = ? AND conversation_id = ?
+               )",
+            [$messageId, $conversationId, $userId, $messageId, $messageId, $conversationId]
         );
     }
 

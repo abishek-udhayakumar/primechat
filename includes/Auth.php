@@ -166,11 +166,8 @@ class Auth {
         $_SESSION['_last_act']  = time();
         $_SESSION['ip']         = $_SERVER['REMOTE_ADDR'] ?? '';
         
-        // Ensure token exists, but don't regenerate it if it's already there
-        // to avoid desyncing with the frontend meta tag.
-        if (empty($_SESSION['csrf_token'])) {
-            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-        }
+        // Always regenerate CSRF token on session creation (privilege escalation)
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
 
     /**

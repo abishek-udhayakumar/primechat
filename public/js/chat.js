@@ -9,8 +9,10 @@
 let _ws = null;
 let _wsReconnectTimer = null;
 let _wsConnected = false;
-const WS_PORT = window.PrimeChatConfig?.wsPort || (location.port === '443' || location.port === '' ? location.port || '443' : '8080');
-const WS_RECONNECT_DELAY = 3000;
+let _wsReconnectAttempts = 0;
+const WS_PORT = window.PrimeChatConfig?.wsPort || (location.protocol === 'https:' ? '443' : (location.port || '8080'));
+const WS_RECONNECT_BASE = 1000;
+const WS_RECONNECT_MAX = 30000;
 
 // ── Polling state ──
 let _pollTimeout = null;
@@ -22,6 +24,9 @@ let _isLoadingOlder = false;
 let _hasMoreHistory = true;
 let _lastActivity = Date.now();
 let _lastMessageReceivedAt = Date.now();
+
+// ── Conversation generation counter (prevents stale fetches) ──
+let _convGeneration = 0;
 const POLL_INTERVAL_FAST = 1000;
 const POLL_INTERVAL_ACTIVE = 3000;
 const POLL_INTERVAL_IDLE = 10000;
@@ -64,6 +69,7 @@ function _connectWs() {
 
         _ws.onopen = () => {
             _wsConnected = true;
+            _wsReconnectAttempts = 0; // Reset on successful connection
             console.log('[PrimeChat WS] Connected');
             _stopPolling();
 
@@ -95,8 +101,14 @@ function _connectWs() {
                 _startPolling();
             }
 
-            // Reconnect after delay
-            _wsReconnectTimer = setTimeout(_connectWs, WS_RECONNECT_DELAY);
+            // Exponential backoff with jitter
+            _wsReconnectAttempts++;
+            const delay = Math.min(
+                WS_RECONNECT_BASE * Math.pow(1.5, _wsReconnectAttempts - 1) + Math.random() * 500,
+                WS_RECONNECT_MAX
+            );
+            console.log(`[PrimeChat WS] Reconnecting in ${Math.round(delay)}ms (attempt ${_wsReconnectAttempts})`);
+            _wsReconnectTimer = setTimeout(_connectWs, delay);
         };
 
         _ws.onerror = (e) => {
@@ -281,6 +293,9 @@ window.openConversation = async (conversationId, otherUser) => {
     // Stop previous poll
     _stopPolling();
 
+    // Increment generation to invalidate any in-flight fetches
+    const gen = ++_convGeneration;
+
     // Detect group conversations
     const isGroup = otherUser && otherUser.isGroup === true;
 
@@ -347,6 +362,7 @@ window.openConversation = async (conversationId, otherUser) => {
 // ─────────────────────────────────────────
 async function _loadInitialMessages() {
     const convId = window.appState.activeConversationId;
+    const gen = _convGeneration;
     if (!convId) return;
 
     // 1. Show cached messages instantly (stale-while-revalidate)
@@ -361,6 +377,9 @@ async function _loadInitialMessages() {
     // 2. Fetch fresh from server
     try {
         const res = await api(`/chat/messages?conversation_id=${convId}&limit=50`);
+        
+        // Stale check: if conversation changed during fetch, abort
+        if (gen !== _convGeneration) return;
         if (!res?.success) return;
 
         const freshMsgs = (res.data.ms || []).map(_remapMessage);
@@ -378,6 +397,7 @@ async function _loadInitialMessages() {
         _cacheMessages(convId);
         _markLastRead();
     } catch (e) {
+        if (gen !== _convGeneration) return; // Stale, ignore error
         console.error('[PrimeChat] Initial load failed:', e);
         // If cache was shown, user sees something useful
         if (!cached) {
@@ -704,8 +724,8 @@ async function sendMessage(content = null, type = 'text') {
     });
 
     if (wsSent) {
-        // Don't confirm via REST — WS will confirm
-        _isSending = false;
+        // WS will confirm via new_message event — don't reset _isSending here
+        // The _replaceTempMessage or error handler will reset it
         return;
     }
 
@@ -883,12 +903,10 @@ function _pruneOldMessages() {
 
     const excess = wrappers.length - DOM_MSG_LIMIT;
 
-    // Prune oldest DOM nodes and state in one RAF
-    requestAnimationFrame(() => {
-        for (let i = 0; i < excess; i++) {
-            wrappers[i].remove();
-        }
-    });
+    // Remove oldest DOM nodes synchronously (no RAF) to keep DOM and state in sync
+    for (let i = 0; i < excess; i++) {
+        wrappers[i].remove();
+    }
 
     // Trim state array
     if (window.appState.messages.length > DOM_MSG_LIMIT) {
@@ -924,6 +942,8 @@ function _replaceTempMessage(tempId, serverMsg) {
             tick.innerHTML = _tickSVG('sent');
         }
     }
+    // Reset sending flag when server confirms
+    _isSending = false;
 }
 
 function _updateReadTicks(otherLastRead, otherUserStatus, otherLastSeen) {
@@ -1061,16 +1081,23 @@ function _toggleTypingBubble(isTyping) {
     }
 }
 
+let _audioCtx = null;
 function _playSound() {
     try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
+        if (!_audioCtx) {
+            _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        // Resume if suspended (autoplay policy)
+        if (_audioCtx.state === 'suspended') {
+            _audioCtx.resume();
+        }
+        const osc = _audioCtx.createOscillator();
+        const gain = _audioCtx.createGain();
+        osc.connect(gain); gain.connect(_audioCtx.destination);
         osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.1, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-        osc.start(); osc.stop(ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.1, _audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, _audioCtx.currentTime + 0.3);
+        osc.start(); osc.stop(_audioCtx.currentTime + 0.3);
     } catch (_) { /* no audio context */ }
 }
 

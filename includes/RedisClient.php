@@ -29,10 +29,10 @@ class RedisClient {
                     $this->connected = $this->redis->auth($_ENV['REDIS_PASSWORD']);
                 }
                 if ($this->connected) {
-                    echo "[Redis] Connected to $host:$port\n";
+                    error_log("[Redis] Connected to $host:$port");
                 }
             } catch (\Exception $e) {
-                echo "[Redis] Connection failed: {$e->getMessage()}\n";
+                error_log("[Redis] Connection failed: {$e->getMessage()}");
                 $this->connected = false;
             }
         }

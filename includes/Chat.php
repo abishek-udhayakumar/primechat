@@ -19,14 +19,15 @@ class Chat {
      * Send a message to a user (creates conversation if needed)
      */
     public function sendMessage(int $senderId, int $recipientId, string $content, string $type = 'text', ?int $replyToId = null, ?string $clientMsgId = null, ?int $expiresIn = null): array {
-        // Check if either user has blocked the other (read-only, outside transaction)
-        $blockList = new BlockList();
-        if ($blockList->isEitherBlocked($senderId, $recipientId)) {
-            return ['success' => false, 'error' => 'Cannot send message. User may have blocked you.'];
-        }
-
         $this->db->beginTransaction();
         try {
+            // Check block status INSIDE transaction (prevents TOCTOU race)
+            $blockList = new BlockList();
+            if ($blockList->isEitherBlocked($senderId, $recipientId)) {
+                $this->db->rollBack();
+                return ['success' => false, 'error' => 'Cannot send message. User may have blocked you.'];
+            }
+
             // Get or create conversation
             $convId = $this->conversationModel->getOrCreateDirect($senderId, $recipientId);
 
@@ -77,14 +78,16 @@ class Chat {
             return ['success' => false, 'error' => 'Not a participant'];
         }
 
-        // For direct conversations, check block status (read-only, outside transaction)
+        // Batch block check for direct conversations (single query instead of N+1)
         $convType = $this->db->query("SELECT type FROM conversations WHERE id = ?", [$conversationId])->fetch();
         if ($convType && $convType['type'] === 'direct') {
             $participants = $this->conversationModel->getParticipants($conversationId);
-            foreach ($participants as $p) {
-                if ((int)$p['id'] !== $senderId) {
-                    $blockList = new BlockList();
-                    if ($blockList->isEitherBlocked($senderId, (int)$p['id'])) {
+            $otherIds = array_filter(array_map(fn($p) => (int)$p['id'], $participants), fn($id) => $id !== $senderId);
+            
+            if (!empty($otherIds)) {
+                $blockList = new BlockList();
+                foreach ($otherIds as $otherId) {
+                    if ($blockList->isEitherBlocked($senderId, $otherId)) {
                         return ['success' => false, 'error' => 'Cannot send message. User may have blocked you.'];
                     }
                 }
@@ -259,6 +262,11 @@ class Chat {
 
         if ($original['is_deleted_for_everyone']) {
             return ['success' => false, 'error' => 'Cannot forward deleted message'];
+        }
+
+        // Verify sender has access to the original message's conversation
+        if (!$this->conversationModel->isParticipant($original['conversation_id'], $senderId)) {
+            return ['success' => false, 'error' => 'Access denied to original message'];
         }
 
         return $this->sendToConversation(

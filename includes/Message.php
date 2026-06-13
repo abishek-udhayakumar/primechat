@@ -12,17 +12,9 @@ class Message {
     }
 
     /**
-     * Send a new message
+     * Send a new message (atomic deduplication via INSERT IGNORE)
      */
     public function send(int $conversationId, int $senderId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null, ?string $clientMsgId = null, ?int $threadRootId = null, ?int $expiresIn = null): int {
-        // Deduplication check — validate ownership to prevent spoofing
-        if ($clientMsgId) {
-            $existing = $this->findByClientMsgId($clientMsgId, $senderId);
-            if ($existing) {
-                return (int) $existing['id'];
-            }
-        }
-
         // If replying to a message, inherit thread_root_id
         if ($replyToId && !$threadRootId) {
             $parent = $this->findById($replyToId);
@@ -38,10 +30,19 @@ class Message {
         }
 
         $this->db->query(
-            "INSERT INTO messages (conversation_id, sender_id, content, type, reply_to_id, forwarded_from_id, thread_root_id, client_msg_id, expires_at)
+            "INSERT IGNORE INTO messages (conversation_id, sender_id, content, type, reply_to_id, forwarded_from_id, thread_root_id, client_msg_id, expires_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [$conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $threadRootId, $clientMsgId, $expiresAt]
         );
+        
+        // If INSERT IGNORE returned 0 affected rows, it was a duplicate — fetch existing
+        if ($clientMsgId && $this->db->getConnection()->rowCount() === 0) {
+            $existing = $this->findByClientMsgId($clientMsgId, $senderId);
+            if ($existing) {
+                return (int) $existing['id'];
+            }
+        }
+        
         return (int) $this->db->lastInsertId();
     }
 

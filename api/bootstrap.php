@@ -15,7 +15,13 @@ if (!defined('BASE_PATH')) {
     define('BASE_PATH', dirname(__DIR__));
 }
 
-// Load core utilities
+// Load core utilities — fail gracefully if config missing
+if (!file_exists(__DIR__ . '/../config/app.php')) {
+    http_response_code(503);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'Config missing. Run: bash scripts/setup.sh']);
+    exit;
+}
 require_once __DIR__ . '/../config/app.php';
 require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../includes/Logger.php';
@@ -72,6 +78,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Load configuration
+if (!file_exists(__DIR__ . '/../config/database.php')) {
+    http_response_code(503);
+    header('Content-Type: application/json');
+    echo json_encode(['success' => false, 'error' => 'Database config missing. Run: bash scripts/setup.sh']);
+    exit;
+}
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/RateLimiter.php';
 

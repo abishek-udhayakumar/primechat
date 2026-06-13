@@ -135,12 +135,15 @@ function _setupInfiniteScroll() {
     }
 
     if (!('IntersectionObserver' in window)) {
-        // Fallback: load on scroll
-        list.addEventListener('scroll', () => {
-            if (list.scrollTop + list.clientHeight >= list.scrollHeight - 40) {
-                _loadConversationPage();
-            }
-        }, { passive: true });
+        // Fallback: load on scroll (guard against multiple listeners)
+        if (!list._scrollFallbackBound) {
+            list._scrollFallbackBound = true;
+            list.addEventListener('scroll', () => {
+                if (list.scrollTop + list.clientHeight >= list.scrollHeight - 40) {
+                    _loadConversationPage();
+                }
+            }, { passive: true });
+        }
         return;
     }
 
@@ -366,12 +369,15 @@ async function performSearch(query) {
 
 window.startNewChat = (recipientId, userObj) => {
     // Clear search
-    document.getElementById('searchResults').classList.remove('show');
-    document.getElementById('searchInput').value = '';
-    document.getElementById('searchClear').classList.remove('show');
+    document.getElementById('searchResults')?.classList.remove('show');
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) searchInput.value = '';
+    document.getElementById('searchClear')?.classList.remove('show');
 
-    // Check if existing conversation
-    const existing = window.appState.conversations.find(c => c.other_user.id === recipientId);
+    // Check if existing conversation (safe for group conversations where other_user is null)
+    const existing = window.appState.conversations.find(c => 
+        c.other_user && c.other_user.id === recipientId
+    );
     if (existing) {
         openConversation(existing.conversation_id, existing.other_user);
         return;

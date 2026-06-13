@@ -36,7 +36,7 @@ class PrimeChatWs implements MessageComponentInterface {
     /** @var \SplObjectStorage<ConnectionInterface> */
     protected \SplObjectStorage $clients;
 
-    /** @var array<int, array{conn: ConnectionInterface, userId: int, username: string, conversations: array<int, bool>}> */
+    /** @var array<int, array<int, array{conn: ConnectionInterface, userId: int, username: string, conversations: array<int, bool>}>> */
     protected array $userConnections = [];
 
     /** @var array<int, array<int, array<int, bool>>> conversation => [userId => true] */
@@ -130,8 +130,13 @@ class PrimeChatWs implements MessageComponentInterface {
         $conn->userId = $userId;
         $conn->username = $user['username'];
         $conn->conversations = [];
+        $conn->connectionId = uniqid('conn_', true);
 
-        $this->userConnections[$userId] = [
+        // Store connection in multi-connection map
+        if (!isset($this->userConnections[$userId])) {
+            $this->userConnections[$userId] = [];
+        }
+        $this->userConnections[$userId][$conn->connectionId] = [
             'conn' => $conn,
             'userId' => $userId,
             'username' => $user['username'],
@@ -192,8 +197,12 @@ class PrimeChatWs implements MessageComponentInterface {
         $this->clients->detach($conn);
 
         $userId = $conn->userId ?? null;
-        if ($userId) {
-            unset($this->userConnections[$userId]);
+        $connectionId = $conn->connectionId ?? null;
+        if ($userId && $connectionId) {
+            unset($this->userConnections[$userId][$connectionId]);
+            if (empty($this->userConnections[$userId])) {
+                unset($this->userConnections[$userId]);
+            }
 
             // Decrement connection count
             if (isset($this->userConnectionCount[$userId])) {
@@ -209,13 +218,7 @@ class PrimeChatWs implements MessageComponentInterface {
             }
 
             // Check if user has other connections
-            $hasOtherConnections = false;
-            foreach ($this->clients as $client) {
-                if (isset($client->userId) && $client->userId === $userId) {
-                    $hasOtherConnections = true;
-                    break;
-                }
-            }
+            $hasOtherConnections = !empty($this->userConnections[$userId]);
 
             if (!$hasOtherConnections) {
                 $userModel = new User();
@@ -449,10 +452,12 @@ class PrimeChatWs implements MessageComponentInterface {
             if ($excludeUserId !== null && $subUserId === $excludeUserId) continue;
 
             if (isset($this->userConnections[$subUserId])) {
-                try {
-                    $this->userConnections[$subUserId]['conn']->send($payload);
-                } catch (\Exception $e) {
-                    echo "[PrimeChat WS] Broadcast error: {$e->getMessage()}\n";
+                foreach ($this->userConnections[$subUserId] as $connData) {
+                    try {
+                        $connData['conn']->send($payload);
+                    } catch (\Exception $e) {
+                        echo "[PrimeChat WS] Broadcast error: {$e->getMessage()}\n";
+                    }
                 }
             }
         }
@@ -493,9 +498,11 @@ class PrimeChatWs implements MessageComponentInterface {
             foreach ($this->conversationSubscribers[$convId] as $subUserId => $true) {
                 if ($subUserId === $userId) continue;
                 if (isset($this->userConnections[$subUserId])) {
-                    try {
-                        $this->userConnections[$subUserId]['conn']->send($payload);
-                    } catch (\Exception $e) {
+                    foreach ($this->userConnections[$subUserId] as $connData) {
+                        try {
+                            $connData['conn']->send($payload);
+                        } catch (\Exception $e) {
+                        }
                     }
                 }
             }

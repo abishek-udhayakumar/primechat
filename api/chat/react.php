@@ -43,24 +43,28 @@ function _handleToggle(int $userId): void {
         Response::error('Access denied', 403);
     }
 
-    // Toggle: remove if exists, add if not
-    $existing = $db->query(
-        "SELECT id FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
-        [$messageId, $userId, $emoji]
-    )->fetch();
-
-    if ($existing) {
-        $db->query(
-            "DELETE FROM message_reactions WHERE id = ?",
-            [(int)$existing['id']]
-        );
-        $added = false;
-    } else {
-        $db->query(
-            "INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)",
+    // Atomic toggle: try to delete first, if nothing deleted then insert
+    $db->beginTransaction();
+    try {
+        $deleted = $db->query(
+            "DELETE FROM message_reactions WHERE message_id = ? AND user_id = ? AND emoji = ?",
             [$messageId, $userId, $emoji]
         );
-        $added = true;
+        $added = false;
+        
+        if ($deleted->rowCount() === 0) {
+            // No existing reaction found — insert new one (ignore if duplicate from race)
+            $db->query(
+                "INSERT IGNORE INTO message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)",
+                [$messageId, $userId, $emoji]
+            );
+            $added = true;
+        }
+        
+        $db->commit();
+    } catch (\Exception $e) {
+        $db->rollBack();
+        throw $e;
     }
 
     // Return updated reaction list for this message
