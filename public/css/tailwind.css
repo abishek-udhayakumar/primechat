@@ -1513,33 +1513,54 @@
     word-wrap: break-word;
     overflow-wrap: break-word;
     contain: content;
+    transition: transform 180ms var(--ease-snap), box-shadow 180ms var(--ease-snap);
   }
 
   .message.sent .message-bubble {
     background: linear-gradient(145deg, var(--bubble-sent-from), var(--bubble-sent-to));
     color: #fff;
     border-bottom-right-radius: var(--tail, 5px);
-    box-shadow: 0 2px 12px rgba(109,91,230,0.18);
+    box-shadow: 0 2px 12px rgba(109,91,230,0.18), 0 1px 3px rgba(0,0,0,0.12);
+    position: relative;
+  }
+  .message.sent .message-bubble::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(145deg, rgba(255,255,255,0.10) 0%, transparent 60%);
+    pointer-events: none;
   }
   .message.sent.grouped .message-bubble { --tail: 18px; }
+  .message.sent .message-bubble:hover {
+    box-shadow: 0 4px 16px rgba(109,91,230,0.28), 0 1px 3px rgba(0,0,0,0.12);
+    transform: translateY(-1px);
+  }
 
   .message.received .message-bubble {
     background: var(--bubble-recv);
     color: var(--ink);
     border-bottom-left-radius: var(--tail, 5px);
     border: 1px solid var(--bubble-recv-edge);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
   .message.received.grouped .message-bubble { --tail: 18px; }
+  .message.received .message-bubble:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    transform: translateY(-1px);
+  }
 
   /* ── Forwarded label ── */
   .message-forwarded {
     display: flex;
     align-items: center;
     gap: 4px;
-    font-size: 10.5px;
-    opacity: 0.6;
+    font-size: 10px;
+    font-weight: 500;
+    opacity: 0.55;
     margin-bottom: 4px;
-    font-style: italic;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
   }
 
   /* ── Reply quote ── */
@@ -1588,27 +1609,30 @@
     align-items: center;
     justify-content: flex-end;
     gap: 3px;
-    margin-top: 3px;
+    margin-top: 2px;
     font-size: 10px;
     user-select: none;
-    opacity: 1;
+    line-height: 1;
+    height: 14px;
   }
-  .message.sent .message-meta { color: rgba(255,255,255,0.65); }
+  .message.sent .message-meta { color: rgba(255,255,255,0.60); }
   .message.received .message-meta { color: var(--ink-faint); }
 
   .message-edited {
     font-style: italic;
-    opacity: 0.7;
+    opacity: 0.6;
+    font-size: 9px;
   }
 
   .message-time { font-variant-numeric: tabular-nums; }
 
   .message-ticks { display: inline-flex; align-items: center; }
   .message-ticks svg { width: 14px; height: 9px; }
-  .message-ticks.sent { opacity: 0.5; }
-  .message-ticks.delivered { opacity: 0.8; }
+  .message-ticks.sent { opacity: 0.45; }
+  .message-ticks.delivered { opacity: 0.75; }
+  .message-ticks.failed { color: var(--danger); opacity: 0.8; }
   .message-ticks.read {
-    color: #b8acff;
+    color: var(--prime);
     opacity: 1;
     animation: tick-in 300ms var(--ease-spring) both;
   }
@@ -1916,6 +1940,98 @@
   .msg-skel-bubble--recv { width: 55%; align-self: flex-start; border-bottom-left-radius: 5px; }
   .msg-skel-bubble--sent { width: 42%; align-self: flex-end; border-bottom-right-radius: 5px; }
 
+
+  /* ═══════════════════════════
+     REACTIONS
+     ═══════════════════════════ */
+  .message-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 4px 0 2px;
+  }
+  .reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 9999px;
+    background: var(--s2);
+    border: 1px solid var(--edge);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 120ms var(--ease-snap),
+                transform 150ms var(--ease-spring),
+                border-color 120ms var(--ease-snap);
+    line-height: 1.4;
+    position: relative;
+  }
+  .reaction-pill:hover {
+    background: var(--s3);
+    transform: scale(1.08);
+    z-index: 1;
+  }
+  .reaction-pill.reacted {
+    background: rgba(124,106,245,0.10);
+    border-color: rgba(124,106,245,0.30);
+  }
+
+  .msg-add-reaction {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 9999px;
+    background: var(--s2);
+    border: 1px solid var(--edge);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, transform 150ms ease, background 150ms ease;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .message-bubble:hover .msg-add-reaction { opacity: 1; }
+  .msg-add-reaction:hover {
+    background: var(--s3);
+    transform: scale(1.10);
+  }
+  .msg-add-reaction svg {
+    width: 14px;
+    height: 14px;
+    color: var(--ink-soft);
+  }
+
+  .reaction-picker {
+    display: flex;
+    gap: 3px;
+    padding: 6px 10px;
+    background: var(--sglass);
+    border: 1px solid var(--edge);
+    border-radius: 22px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    z-index: 100;
+    animation: scale-in 120ms var(--ease-spring) both;
+    transform-origin: bottom left;
+  }
+  .reaction-picker-btn {
+    background: none;
+    border: none;
+    font-size: 22px;
+    cursor: pointer;
+    padding: 3px;
+    border-radius: 6px;
+    transition: transform 120ms ease;
+    line-height: 1;
+    filter: grayscale(0.1);
+  }
+  .reaction-picker-btn:hover {
+    transform: scale(1.35);
+    filter: none;
+  }
 
   /* ═══════════════════════════
      CONTEXT MENU

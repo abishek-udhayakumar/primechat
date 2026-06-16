@@ -27,6 +27,7 @@ require_once __DIR__ . '/../includes/User.php';
 require_once __DIR__ . '/../includes/Conversation.php';
 require_once __DIR__ . '/../includes/Message.php';
 require_once __DIR__ . '/../includes/Chat.php';
+require_once __DIR__ . '/../includes/BlockList.php';
 require_once __DIR__ . '/../includes/JwtManager.php';
 
 /**
@@ -50,6 +51,9 @@ class PrimeChatWs implements MessageComponentInterface {
     /** @var array<int, int[]> conversation_id => [last_checked_message_id] */
     protected array $lastCheckedId = [];
 
+    /** @var int last checked ws_notifications id */
+    protected int $lastCheckedNotifId = 0;
+
     /** @var array<string, int[]> IP => [timestamps] for rate limiting */
     protected array $connectionRateLimit = [];
 
@@ -71,6 +75,18 @@ class PrimeChatWs implements MessageComponentInterface {
         $this->convModel = new Conversation();
         $this->msgModel = new Message();
         $this->db = Database::getInstance();
+
+        // Auto-create ws_notifications table for event broadcasting
+        $this->db->query(
+            "CREATE TABLE IF NOT EXISTS ws_notifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                event_type VARCHAR(50) NOT NULL,
+                conversation_id INT NOT NULL,
+                payload TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+        );
+
         echo "[PrimeChat WS] Server initialized\n";
     }
 
@@ -146,6 +162,8 @@ class PrimeChatWs implements MessageComponentInterface {
         // Set user online
         $userModel->updateStatus($userId, 'online');
 
+        $conn->lastPongTime = time();
+
         echo "[PrimeChat WS] User {$user['username']} (ID: $userId) connected\n";
 
         // Send welcome message
@@ -179,6 +197,10 @@ class PrimeChatWs implements MessageComponentInterface {
                 $this->handleSend($from, $data);
                 break;
 
+            case 'delivery_ack':
+                $this->handleDeliveryAck($from, $data);
+                break;
+
             case 'typing':
                 $this->handleTyping($from, $data);
                 break;
@@ -188,7 +210,18 @@ class PrimeChatWs implements MessageComponentInterface {
                 break;
 
             case 'ping':
+                $from->lastPongTime = time();
                 $from->send(json_encode(['type' => 'pong']));
+                break;
+
+            case 'pong':
+                $from->lastPongTime = time();
+                break;
+
+            case 'heartbeat':
+                $from->lastPongTime = time();
+                $userModel = new User();
+                $userModel->updateStatus($userId, 'online');
                 break;
         }
     }
@@ -357,7 +390,7 @@ class PrimeChatWs implements MessageComponentInterface {
         $userId = $from->userId;
         $convId = (int)($data['conversation_id'] ?? 0);
         $content = Sanitizer::sanitizeMessage($data['content'] ?? '');
-        $type = in_array($data['type'] ?? 'text', ['text', 'image', 'file', 'voice']) ? ($data['type'] ?? 'text') : 'text';
+        $type = in_array($data['msg_type'] ?? 'text', ['text', 'image', 'file', 'voice']) ? ($data['msg_type'] ?? 'text') : 'text';
         $replyToId = isset($data['reply_to_id']) ? (int)$data['reply_to_id'] : null;
         $clientMsgId = $data['client_msg_id'] ?? null;
 
@@ -375,6 +408,23 @@ class PrimeChatWs implements MessageComponentInterface {
         if ($convId <= 0) {
             $from->send(json_encode(['type' => 'error', 'message' => 'conversation_id required']));
             return;
+        }
+
+        // Check if blocked
+        $otherUser = $this->convModel->getOtherParticipant($convId, $userId);
+        if ($otherUser) {
+            $otherUserId = $otherUser['id'];
+            $db = Database::getInstance();
+            $stmt = $db->query(
+                "SELECT 1 FROM blocked_users 
+                 WHERE (user_id = ? AND blocked_user_id = ?) 
+                    OR (user_id = ? AND blocked_user_id = ?)",
+                [$userId, $otherUserId, $otherUserId, $userId]
+            );
+            if ($stmt->fetch()) {
+                $from->send(json_encode(['type' => 'error', 'message' => 'You cannot send a message to this user. They may be blocked.']));
+                return;
+            }
         }
 
         // Send message through the existing Chat engine
@@ -396,9 +446,19 @@ class PrimeChatWs implements MessageComponentInterface {
                 'sender_id' => $userId,
             ]);
 
-            // Broadcast to all subscribers of this conversation
+            // Broadcast to all other subscribers of this conversation
             $this->broadcastToConversation($convId, $payload, $userId);
+
+            // Acknowledge to sender so client updates temp message
+            $from->send($payload);
         }
+
+        // Notify all conversation participants that there's new activity (for sidebar update)
+        $convPayload = json_encode([
+            'type' => 'conv_update',
+            'conversation_id' => $convId,
+        ]);
+        $this->broadcastToConversation($convId, $convPayload);
     }
 
     private function handleTyping(ConnectionInterface $from, array $data): void {
@@ -424,6 +484,28 @@ class PrimeChatWs implements MessageComponentInterface {
         $this->broadcastToConversation($convId, $payload, $userId);
     }
 
+    private function handleDeliveryAck(ConnectionInterface $from, array $data): void {
+        $userId = $from->userId;
+        $convId = (int)($data['conversation_id'] ?? 0);
+        $lastReceivedId = (int)($data['last_received_id'] ?? 0);
+
+        if ($convId <= 0 || $lastReceivedId <= 0) return;
+
+        $delivered = $this->chat->acknowledgeDelivery($convId, $userId, $lastReceivedId);
+
+        // Notify sender of delivery status update
+        if ($delivered > 0) {
+            $payload = json_encode([
+                'type' => 'delivery_receipt',
+                'conversation_id' => $convId,
+                'user_id' => $userId,
+                'last_delivered_id' => $lastReceivedId,
+                'count' => $delivered,
+            ]);
+            $this->broadcastToConversation($convId, $payload, $userId);
+        }
+    }
+
     private function handleRead(ConnectionInterface $from, array $data): void {
         $userId = $from->userId;
         $convId = (int)($data['conversation_id'] ?? 0);
@@ -431,7 +513,7 @@ class PrimeChatWs implements MessageComponentInterface {
 
         if ($convId <= 0 || $messageId <= 0) return;
 
-        $this->chat->markAsRead($convId, $userId, $messageId);
+        $this->chat->acknowledgeRead($convId, $userId, $messageId);
 
         $payload = json_encode([
             'type' => 'read_receipt',
@@ -524,7 +606,8 @@ class PrimeChatWs implements MessageComponentInterface {
                 $stmt = $this->db->query(
                     "SELECT m.id, m.conversation_id, m.sender_id, m.content, m.type,
                             m.reply_to_id, m.forwarded_from_id, m.is_edited,
-                            m.is_deleted_for_everyone, m.client_msg_id, m.created_at, m.updated_at,
+                            m.is_deleted_for_everyone, m.client_msg_id, m.message_status,
+                            m.delivered_at, m.read_at, m.created_at, m.updated_at,
                             u.username AS sender_username,
                             u.display_name AS sender_display_name,
                             u.avatar_url AS sender_avatar_url,
@@ -554,19 +637,105 @@ class PrimeChatWs implements MessageComponentInterface {
                 $messages = $stmt->fetchAll();
                 if (!empty($messages)) {
                     foreach ($messages as $msg) {
-                        $formatted = Message::formatShorthand($msg, (int)$msg['sender_id']);
-                        $payload = json_encode([
-                            'type' => 'new_message',
-                            'conversation_id' => $convId,
-                            'message' => $formatted,
-                            'sender_id' => (int)$msg['sender_id'],
-                        ]);
-                        $this->broadcastToConversation($convId, $payload);
+                        $senderId = (int)$msg['sender_id'];
+                        // Format per-subscriber so is_mine is correct for each user
+                        foreach ($this->conversationSubscribers[$convId] as $subUserId => $subTrue) {
+                            $formatted = Message::formatShorthand($msg, $subUserId);
+                            $payload = json_encode([
+                                'type' => 'new_message',
+                                'conversation_id' => $convId,
+                                'message' => $formatted,
+                                'sender_id' => $senderId,
+                            ]);
+                            if (isset($this->userConnections[$subUserId])) {
+                                foreach ($this->userConnections[$subUserId] as $connData) {
+                                    try { $connData['conn']->send($payload); } catch (\Exception $e) {}
+                                }
+                            }
+                        }
                     }
                     $this->lastCheckedId[$convId] = (int)$messages[count($messages) - 1]['id'];
+
+                    // Broadcast conv_update for conversation list refresh
+                    $convPayload = json_encode([
+                        'type' => 'conv_update',
+                        'conversation_id' => $convId,
+                    ]);
+                    foreach ($this->conversationSubscribers[$convId] as $subUserId => $subTrue) {
+                        if (isset($this->userConnections[$subUserId])) {
+                            foreach ($this->userConnections[$subUserId] as $connData) {
+                                try { $connData['conn']->send($convPayload); } catch (\Exception $e) {}
+                            }
+                        }
+                    }
                 }
+
+                // Check for ws_notifications events (reactions, group changes, pins)
+                $this->checkForWsNotifications();
             } catch (\Exception $e) {
                 echo "[PrimeChat WS] Check messages error: {$e->getMessage()}\n";
+            }
+        }
+    }
+
+    /**
+     * Check for ws_notifications events (reactions, group changes, pins, etc.)
+     * and broadcast them to conversation subscribers.
+     */
+    public function checkForWsNotifications(): void {
+        try {
+            $stmt = $this->db->query(
+                "SELECT id, event_type, conversation_id, payload
+                 FROM ws_notifications
+                 WHERE id > ?
+                 ORDER BY id ASC
+                 LIMIT 50",
+                [$this->lastCheckedNotifId]
+            );
+            $events = $stmt->fetchAll();
+
+            foreach ($events as $event) {
+                $convId = (int)$event['conversation_id'];
+                $eventType = $event['event_type'];
+                $payload = $event['payload'] ? json_decode($event['payload'], true) : [];
+
+                $broadcastPayload = json_encode(array_merge([
+                    'type' => $eventType,
+                    'conversation_id' => $convId,
+                ], $payload));
+
+                $this->broadcastToConversation($convId, $broadcastPayload);
+
+                $this->lastCheckedNotifId = (int)$event['id'];
+            }
+        } catch (\Exception $e) {
+            echo "[PrimeChat WS] Notifications error: {$e->getMessage()}\n";
+        }
+    }
+
+    /**
+     * Check for dead connections and ping active ones.
+     */
+    public function checkConnections(): void {
+        $now = time();
+        foreach ($this->clients as $conn) {
+            if (!isset($conn->lastPongTime)) {
+                $conn->lastPongTime = $now;
+                continue;
+            }
+
+            // Drop connections silent for > 65s
+            if ($now - $conn->lastPongTime > 65) {
+                echo "[PrimeChat WS] Connection timeout for user " . ($conn->userId ?? 'unknown') . "\n";
+                $conn->close();
+                continue;
+            }
+
+            // Send ping
+            try {
+                $conn->send(json_encode(['type' => 'ping']));
+            } catch (\Exception $e) {
+                $conn->close();
             }
         }
     }
@@ -628,6 +797,11 @@ $loop = \React\EventLoop\Loop::get();
 // Periodically check for new messages from REST API
 $loop->addPeriodicTimer(2, function () use ($wsHandler) {
     $wsHandler->checkForNewMessages();
+});
+
+// Periodically check for dead connections
+$loop->addPeriodicTimer(30, function () use ($wsHandler) {
+    $wsHandler->checkConnections();
 });
 
 // Set up WebSocket server with the shared loop

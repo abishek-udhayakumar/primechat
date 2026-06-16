@@ -17,11 +17,14 @@ class User {
     public function findById(int $id): ?array {
         $stmt = $this->db->query(
             "SELECT id, username, email, phone, display_name, avatar_url, about,
-                    status, last_seen, wallpaper, theme, created_at
+                    IF(last_seen >= DATE_SUB(NOW(), INTERVAL 60 SECOND), 'online', 'offline') AS status, last_seen, wallpaper, theme, preferences, created_at
              FROM users WHERE id = ?",
             [$id]
         );
         $user = $stmt->fetch();
+        if ($user && isset($user['preferences'])) {
+            $user['preferences'] = json_decode($user['preferences'], true) ?: [];
+        }
         return $user ?: null;
     }
 
@@ -34,6 +37,9 @@ class User {
             [strtolower(trim($email))]
         );
         $user = $stmt->fetch();
+        if ($user && isset($user['preferences'])) {
+            $user['preferences'] = json_decode($user['preferences'], true) ?: [];
+        }
         return $user ?: null;
     }
 
@@ -46,6 +52,9 @@ class User {
             [strtolower(trim($username))]
         );
         $user = $stmt->fetch();
+        if ($user && isset($user['preferences'])) {
+            $user['preferences'] = json_decode($user['preferences'], true) ?: [];
+        }
         return $user ?: null;
     }
 
@@ -100,15 +109,34 @@ class User {
     }
 
     /**
+     * Update user preferences (JSON merge patch)
+     */
+    public function updatePreferences(int $userId, array $newPrefs): bool {
+        $jsonStr = json_encode($newPrefs);
+        if ($jsonStr === false) return false;
+
+        $this->db->query(
+            "UPDATE users SET preferences = COALESCE(JSON_MERGE_PATCH(preferences, ?), ?) WHERE id = ?",
+            [$jsonStr, $jsonStr, $userId]
+        );
+        return true;
+    }
+
+    /**
      * Update user online status
      */
     public function updateStatus(int $userId, string $status): void {
-        // Optimization: Only update last_seen if status changed or if it was updated more than 60s ago
+        if ($status === 'offline') {
+            $this->db->query("UPDATE users SET status = 'offline', last_seen = '2000-01-01 00:00:00' WHERE id = ?", [$userId]);
+            return;
+        }
+
+        // Optimization: Throttle last_seen updates to every 10 seconds to avoid DB thrashing
         $this->db->query(
             "UPDATE users
-             SET status = ?, last_seen = NOW()
-             WHERE id = ? AND (status != ? OR last_seen < DATE_SUB(NOW(), INTERVAL 60 SECOND))",
-            [$status, $userId, $status]
+             SET status = 'online', last_seen = NOW()
+             WHERE id = ? AND (last_seen IS NULL OR last_seen < DATE_SUB(NOW(), INTERVAL 10 SECOND))",
+            [$userId]
         );
     }
 
@@ -126,7 +154,8 @@ class User {
         $phoneLike = '%' . $phoneNormalized . '%';
 
         $stmt = $this->db->query(
-            "SELECT id, username, display_name, avatar_url, about, status, last_seen
+            "SELECT id, username, display_name, avatar_url, about, 
+                    IF(last_seen >= DATE_SUB(NOW(), INTERVAL 60 SECOND), 'online', 'offline') AS status, last_seen
              FROM users
              WHERE id != ?
                AND (
@@ -162,7 +191,7 @@ class User {
      */
     public function getStatus(int $userId): ?array {
         $stmt = $this->db->query(
-            "SELECT status, last_seen FROM users WHERE id = ?",
+            "SELECT IF(last_seen >= DATE_SUB(NOW(), INTERVAL 60 SECOND), 'online', 'offline') AS status, last_seen FROM users WHERE id = ?",
             [$userId]
         );
         $result = $stmt->fetch();

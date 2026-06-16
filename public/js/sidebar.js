@@ -103,6 +103,7 @@ function _remapConversations(list) {
                 display_name : conv.u.n,
                 avatar_url   : conv.u.a,
                 status       : conv.u.s,
+                last_seen    : conv.u.l || null,
                 about        : conv.u?.ab,
             };
         } else {

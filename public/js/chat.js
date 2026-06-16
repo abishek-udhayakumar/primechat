@@ -9,7 +9,13 @@
 let _ws = null;
 let _wsReconnectTimer = null;
 let _wsConnected = false;
+window._wsConnected = false; // Global alias for cross-module checks
 let _wsReconnectAttempts = 0;
+
+// ── WS ack tracking (for send reliability) ──
+const _wsAckResolvers = new Map();
+const _wsAckTimers = new Map();
+const WS_ACK_TIMEOUT = 4000;
 const WS_PORT = window.PrimeChatConfig?.wsPort || (location.protocol === 'https:' ? '443' : (location.port || '8080'));
 const WS_RECONNECT_BASE = 1000;
 const WS_RECONNECT_MAX = 30000;
@@ -69,6 +75,7 @@ function _connectWs() {
 
         _ws.onopen = () => {
             _wsConnected = true;
+            window._wsConnected = true;
             _wsReconnectAttempts = 0; // Reset on successful connection
             console.log('[PrimeChat WS] Connected');
             _stopPolling();
@@ -77,6 +84,11 @@ function _connectWs() {
             const convId = window.appState.activeConversationId;
             if (convId) {
                 _wsSend({ type: 'subscribe', conversation_id: convId });
+            }
+
+            // Re-sync: reload conversations to get fresh unread counts
+            if (typeof loadConversations === 'function') {
+                loadConversations();
             }
 
             EventBus.emit('ws:connected');
@@ -93,6 +105,7 @@ function _connectWs() {
 
         _ws.onclose = () => {
             _wsConnected = false;
+            window._wsConnected = false;
             console.log('[PrimeChat WS] Disconnected');
             EventBus.emit('ws:disconnected');
 
@@ -118,6 +131,7 @@ function _connectWs() {
     } catch (e) {
         console.error('[PrimeChat WS] Connection failed:', e);
         _wsConnected = false;
+        window._wsConnected = false;
         if (window.appState.activeConversationId) {
             _startPolling();
         }
@@ -132,8 +146,34 @@ function _wsSend(data) {
     return false;
 }
 
+/**
+ * Send via WebSocket and wait for a server ack (new_message with matching client_msg_id).
+ * Falls back if WS is down or ack times out.
+ */
+function _wsSendWithAck(data, timeoutMs = WS_ACK_TIMEOUT) {
+    return new Promise((resolve, reject) => {
+        if (!_wsSend(data)) {
+            reject(new Error('WS not connected'));
+            return;
+        }
+        const cmId = data.client_msg_id;
+        if (!cmId) {
+            resolve(null);
+            return;
+        }
+        _wsAckResolvers.set(cmId, resolve);
+        const timer = setTimeout(() => {
+            _wsAckResolvers.delete(cmId);
+            _wsAckTimers.delete(cmId);
+            reject(new Error('WS ack timeout'));
+        }, timeoutMs);
+        _wsAckTimers.set(cmId, timer);
+    });
+}
+
 function _disconnectWs() {
     _wsConnected = false;
+    window._wsConnected = false;
     clearTimeout(_wsReconnectTimer);
     if (_ws) {
         _ws.onclose = null; // prevent auto-reconnect
@@ -156,6 +196,10 @@ function _handleWsMessage(data) {
             _handleWsNewMessage(data);
             break;
 
+        case 'delivery_receipt':
+            _handleWsDeliveryReceipt(data);
+            break;
+
         case 'typing':
             _handleWsTyping(data);
             break;
@@ -171,6 +215,24 @@ function _handleWsMessage(data) {
         case 'pong':
             break;
 
+        case 'conv_update':
+            _handleWsConvUpdate(data);
+            break;
+
+        case 'reaction_updated':
+            _handleWsReactionUpdated(data);
+            break;
+
+        case 'group_updated':
+            _handleWsGroupUpdated(data);
+            break;
+
+        case 'pin_updated':
+            if (typeof loadConversations === 'function') {
+                loadConversations();
+            }
+            break;
+
         case 'error':
             console.error('[PrimeChat WS] Server error:', data.message);
             break;
@@ -182,6 +244,16 @@ function _handleWsNewMessage(data) {
     const msg = data.message ? _remapMessage(data.message) : null;
 
     if (!msg) return;
+
+    // Resolve pending WS ack if this is our own message
+    if (msg.client_msg_id && _wsAckResolvers.has(msg.client_msg_id)) {
+        const resolve = _wsAckResolvers.get(msg.client_msg_id);
+        clearTimeout(_wsAckTimers.get(msg.client_msg_id));
+        _wsAckResolvers.delete(msg.client_msg_id);
+        _wsAckTimers.delete(msg.client_msg_id);
+        resolve(msg);
+        // Continue to process replacement below
+    }
 
     // Only process if we're viewing this conversation
     if (window.appState.activeConversationId !== convId) return;
@@ -208,6 +280,11 @@ function _handleWsNewMessage(data) {
     window._appendMessages([msg]);
     _pruneOldMessages();
 
+    // Send delivery acknowledgment for messages from others
+    if (!msg.is_mine && typeof msg.id === 'number') {
+        _wsSend({ type: 'delivery_ack', conversation_id: convId, last_received_id: msg.id });
+    }
+
     if (wasAtBottom) {
         scrollToBottom(true);
         _markLastRead();
@@ -218,6 +295,36 @@ function _handleWsNewMessage(data) {
     EventBus.emit('message:receive', { messages: [msg], convId });
     if (!msg.is_mine) _playSound();
     _cacheMessages(convId);
+}
+
+function _handleWsConvUpdate(data) {
+    if (typeof loadConversations === 'function') {
+        loadConversations();
+    }
+}
+
+function _handleWsReactionUpdated(data) {
+    const { conversation_id, message_id, reactions } = data;
+    if (!conversation_id || !message_id) return;
+    const msg = window.appState.messages.find(m => m.id === message_id);
+    if (!msg) return;
+    msg.reactions = reactions || null;
+    if (typeof _updateReactionsRow === 'function') {
+        _updateReactionsRow(message_id, msg.reactions);
+    }
+}
+
+function _handleWsGroupUpdated(data) {
+    const { conversation_id, action, user_id } = data;
+    if (window.appState.activeConversationId === conversation_id) {
+        if (action === 'removed' && user_id === window.appState.user?.id) {
+            showToast('You were removed from this group', 'info');
+            document.getElementById('messageInput')?.setAttribute('disabled', '');
+        }
+    }
+    if (typeof loadConversations === 'function') {
+        setTimeout(loadConversations, 500);
+    }
 }
 
 function _handleWsTyping(data) {
@@ -263,6 +370,32 @@ function _handleWsStatus(data) {
     }
 }
 
+function _handleWsDeliveryReceipt(data) {
+    if (window.appState.activeConversationId !== data.conversation_id) return;
+
+    const lastDeliveredId = data.last_delivered_id;
+    if (!lastDeliveredId) return;
+
+    // Update message ticks for messages up to last_delivered_id
+    const msgs = window.appState.messages;
+    const start = Math.max(0, msgs.length - 50);
+    for (let i = msgs.length - 1; i >= start; i--) {
+        const msg = msgs[i];
+        if (!msg.is_mine || typeof msg.id !== 'number') continue;
+        if (msg.id <= lastDeliveredId && msg.read_status !== 'read') {
+            msg.read_status = 'delivered';
+            const el = document.getElementById(`msg_${msg.id}`);
+            if (el) {
+                const tick = el.querySelector('.message-ticks');
+                if (tick) {
+                    tick.className = 'message-ticks delivered';
+                    tick.innerHTML = _tickSVG('delivered');
+                }
+            }
+        }
+    }
+}
+
 function _handleWsReadReceipt(data) {
     if (window.appState.activeConversationId !== data.conversation_id) return;
 
@@ -279,6 +412,35 @@ window.initChat = () => {
     document.getElementById('cancelReplyBtn')?.addEventListener('click', cancelReply);
     // Attempt WebSocket connection
     _connectWs();
+    _startPresenceEngine();
+
+    // Listen for offline queue sends (REST fallback)
+    EventBus.on('offline:sent', ({ clientMsgId, serverResponse }) => {
+        if (!clientMsgId || !serverResponse?.message) return;
+        const stillTemp = window.appState.messages.find(m => m.id === clientMsgId);
+        if (stillTemp) {
+            const confirmedMsg = _remapMessage(serverResponse.message);
+            _replaceTempMessage(clientMsgId, confirmedMsg);
+            window.appState.lastMessageId = _lastId(window.appState.messages);
+        }
+    });
+
+    // Listen for offline queue failures — mark message as failed
+    EventBus.on('offline:failed', ({ id }) => {
+        const msg = window.appState.messages.find(m => m.id === id);
+        if (msg) {
+            msg.read_status = 'failed';
+            const el = document.getElementById(`msg_${id}`);
+            if (el) {
+                const tick = el.querySelector('.message-ticks');
+                if (tick) {
+                    tick.className = 'message-ticks failed';
+                    tick.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="10" y1="6" x2="6" y2="10"/><line x1="6" y1="6" x2="10" y2="10"/></svg>';
+                }
+                el.title = 'Failed to send';
+            }
+        }
+    });
 };
 
 // ─────────────────────────────────────────
@@ -552,12 +714,22 @@ async function _poll() {
         });
         if (!res?.success) return;
 
-        const { ms: shorthandMsgs, ty, us, ls, lr } = res.data;
+        const { ms: shorthandMsgs, ty, us, ls, lr, uc } = res.data;
         const messages = (shorthandMsgs || []).map(_remapMessage);
         const typing = ty;
         const other_user_status = us;
         const other_last_seen = ls;
         const other_last_read = lr;
+        const unreadCount = uc;
+
+        // ── Update unread count in appState and sidebar ──
+        if (unreadCount !== undefined) {
+            const conv = (window.appState.conversations || []).find(c => c.conversation_id === convId);
+            if (conv) {
+                conv.unread_count = unreadCount;
+                renderConversations();
+            }
+        }
 
         // ── Populate appState.onlineUsers ──
         if (window.appState.activeOtherUser) {
@@ -630,6 +802,15 @@ async function _poll() {
                 // ── DOM pruning: cap at 200 messages ──
                 _pruneOldMessages();
 
+                // Send delivery acknowledgment for received messages
+                const lastReceived = newMsgs.filter(m => !m.is_mine && typeof m.id === 'number');
+                if (lastReceived.length > 0) {
+                    const maxId = Math.max(...lastReceived.map(m => m.id));
+                    if (_wsConnected) {
+                        _wsSend({ type: 'delivery_ack', conversation_id: convId, last_received_id: maxId });
+                    }
+                }
+
                 if (wasAtBottom) {
                     scrollToBottom(true);
                     _markLastRead();
@@ -700,10 +881,11 @@ async function sendMessage(content = null, type = 'text') {
     };
 
     // Clear input immediately
-    if (input) { input.value = ''; input.style.height = 'auto'; }
-    document.getElementById('sendBtn')?.classList.add('hidden');
-    document.getElementById('voiceBtn')?.classList.remove('hidden');
-    notifyTyping(false);
+    if (input) { 
+        input.value = ''; 
+        input.style.height = 'auto'; 
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
     cancelReply();
 
     window.appState.messages.push(tempMsg);
@@ -713,49 +895,99 @@ async function sendMessage(content = null, type = 'text') {
 
     _isSending = true;
 
-    // Try WebSocket first, fall back to REST API
-    const wsSent = _wsConnected && _wsSend({
+    // Try WebSocket with ack timeout
+    const wsPayload = {
         type: 'send',
         conversation_id: convId,
         content: msgContent,
-        type,
+        msg_type: type,
         reply_to_id: window.appState.replyingTo ? window.appState.replyingTo.id : null,
         client_msg_id: clientMsgId,
-    });
+    };
 
-    if (wsSent) {
-        // WS will confirm via new_message event — don't reset _isSending here
-        // The _replaceTempMessage or error handler will reset it
-        return;
+    if (_wsConnected) {
+        try {
+            await _wsSendWithAck(wsPayload);
+            // WS ack received — server confirmed the message
+            _isSending = false;
+            return;
+        } catch (wsErr) {
+            console.warn('[PrimeChat] WS send failed, falling back:', wsErr.message);
+        }
+    }
+
+    // Offline queue fallback (also handles REST)
+    _enqueueOfflineMessage(clientMsgId, convId, other, msgContent, type);
+}
+
+function _enqueueOfflineMessage(clientMsgId, convId, other, msgContent, type) {
+    if (window.OfflineQueue) {
+        window.OfflineQueue.enqueue({
+            clientMsgId: clientMsgId,
+            convId: convId,
+            recipientId: other ? other.id : null,
+            content: msgContent,
+            type: type,
+            replyToId: window.appState.replyingTo ? window.appState.replyingTo.id : null
+        }).catch(e => {
+            console.error('[PrimeChat] OfflineQueue enqueue failed:', e);
+            _fallbackRestApiSend(clientMsgId, convId, other, msgContent, type);
+        });
+        _isSending = false;
+    } else {
+        _fallbackRestApiSend(clientMsgId, convId, other, msgContent, type);
+    }
+}
+
+async function _fallbackRestApiSend(clientMsgId, convId, other, msgContent, type) {
+    const reqBody = {
+        content: msgContent,
+        type: type,
+        client_msg_id: clientMsgId,
+    };
+    if (convId) {
+        reqBody.conversation_id = convId;
+    } else if (other) {
+        reqBody.recipient_id = other.id;
+    }
+
+    if (window.appState.replyingTo) {
+        reqBody.reply_to_id = window.appState.replyingTo.id;
     }
 
     try {
         const res = await api('/chat/send', { method: 'POST', body: reqBody });
 
         if (res?.success) {
-            // Handle new conversation created
             if (!window.appState.activeConversationId && res.data.conversation_id) {
                 window.appState.activeConversationId = res.data.conversation_id;
                 _startPolling();
                 loadConversations();
             }
-
-            // Check if poll already replaced it in the background
-            const stillTemp = window.appState.messages.find(m => m.id === tempId);
+            const stillTemp = window.appState.messages.find(m => m.id === clientMsgId);
             if (stillTemp) {
                 const confirmedMsg = _remapMessage(res.data.message);
-                _replaceTempMessage(tempId, confirmedMsg);
+                _replaceTempMessage(clientMsgId, confirmedMsg);
             }
             window.appState.lastMessageId = _lastId(window.appState.messages);
             loadConversations();
         }
     } catch (e) {
         console.error('[PrimeChat] Send failed:', e);
+        const stillTemp = window.appState.messages.find(m => m.id === clientMsgId);
+        if (stillTemp) {
+            stillTemp.read_status = 'failed';
+            const el = document.getElementById(`msg_${clientMsgId}`);
+            if (el) {
+                const tick = el.querySelector('.message-ticks');
+                if (tick) {
+                    tick.className = 'message-ticks failed';
+                    tick.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="10" y1="6" x2="6" y2="10"/><line x1="6" y1="6" x2="10" y2="10"/></svg>';
+                }
+                el.title = 'Failed to send';
+            }
+        }
         showToast('Failed to send message', 'error');
-        // Remove temp message
-        window.appState.messages = window.appState.messages.filter(m => m.id !== tempId);
-        const el = document.getElementById(`msg_${tempId}`);
-        el?.remove();
     } finally {
         _isSending = false;
     }
@@ -784,8 +1016,8 @@ function notifyTyping(isTyping) {
 
     if (isTyping) {
         clearTimeout(_typingTimer);
-        // Auto-stop after 2s inactivity
-        _typingTimer = setTimeout(() => notifyTyping(false), 2000);
+        // Auto-stop after 5s inactivity (WhatsApp uses ~5-7s)
+        _typingTimer = setTimeout(() => notifyTyping(false), 5000);
     }
 }
 
@@ -799,9 +1031,9 @@ function _markLastRead() {
     const convId = window.appState.activeConversationId;
     if (!convId) return;
 
-    // Find last message NOT sent by me
-    const last = [...msgs].reverse().find(m => !m.is_mine);
-    if (!last) return;
+    // Find last message NOT sent by me — must have a real server ID (not a temp string)
+    const last = [...msgs].reverse().find(m => !m.is_mine && typeof m.id === 'number');
+    if (!last || last.id <= 0) return;
 
     api('/chat/read', {
         method: 'POST',
@@ -886,6 +1118,7 @@ window.replyToMessage = (messageId) => {
 function cancelReply() {
     window.appState.replyingTo = null;
     document.getElementById('replyPreview')?.classList.remove('show');
+    document.getElementById('messageInput')?.focus();
 }
 
 // ─────────────────────────────────────────
@@ -935,11 +1168,12 @@ function _replaceTempMessage(tempId, serverMsg) {
     if (el) {
         el.id = `msg_${serverMsg.id}`;
         el.dataset.msgId = serverMsg.id;
-        // Server confirmed receipt — transition to 'sent' (single tick)
+        // Use the server message_status for the tick
+        const status = serverMsg.read_status || 'sent';
         const tick = el.querySelector('.message-ticks');
         if (tick) {
-            tick.className = 'message-ticks sent';
-            tick.innerHTML = _tickSVG('sent');
+            tick.className = `message-ticks ${status}`;
+            tick.innerHTML = _tickSVG(status);
         }
     }
     // Reset sending flag when server confirms
@@ -954,10 +1188,13 @@ function _updateReadTicks(otherLastRead, otherUserStatus, otherLastSeen) {
         const msg = msgs[i];
         if (!msg.is_mine || typeof msg.id !== 'number') continue;
         
-        let newStatus = 'sent';
+        // Use the message_status from server if available
+        let newStatus = msg.read_status || 'sent';
+        
+        // Override with computed status only if DB status is stale
         if (otherLastRead !== null && msg.id <= otherLastRead) {
             newStatus = 'read';
-        } else {
+        } else if (newStatus === 'sent') {
             if (otherUserStatus === 'online') {
                 newStatus = 'delivered';
             } else if (otherLastSeen && msg.created_at) {
@@ -1129,7 +1366,8 @@ function _bindInputHandlers() {
     });
 
     input?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        const enterToSend = window.appState?.user?.preferences?.enter_send !== false;
+        if (e.key === 'Enter' && !e.shiftKey && enterToSend) {
             e.preventDefault();
             sendMessage();
         }
@@ -1194,16 +1432,48 @@ function _bindPanelHandlers() {
     });
 }
 
+// ─────────────────────────────────────────
+// PRESENCE ENGINE (HEARTBEAT)
+// ─────────────────────────────────────────
+let _presenceInterval = null;
+
+function _startPresenceEngine() {
+    _stopPresenceEngine();
+    _sendHeartbeat();
+    _presenceInterval = setInterval(_sendHeartbeat, 30000);
+}
+
+function _stopPresenceEngine() {
+    if (_presenceInterval) {
+        clearInterval(_presenceInterval);
+        _presenceInterval = null;
+    }
+}
+
+async function _sendHeartbeat() {
+    if (_wsConnected) {
+        _wsSend({ type: 'heartbeat' });
+    } else {
+        try {
+            await api('/chat/heartbeat', { method: 'GET' });
+        } catch (e) {}
+    }
+}
+
 // Stop polling / WS when leaving page
 window.addEventListener('beforeunload', () => {
     _stopPolling();
+    _stopPresenceEngine();
     _disconnectWs();
 });
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && window.appState.activeConversationId) {
-        if (!_wsConnected) {
+    if (document.visibilityState === 'visible') {
+        _startPresenceEngine();
+        if (window.appState.activeConversationId && !_wsConnected) {
             _poll(); // immediate catch-up when tab becomes visible
         }
+    } else {
+        _stopPresenceEngine();
     }
 });
 
@@ -1262,6 +1532,11 @@ function _bindMessageSearchHandlers() {
     const searchInput = document.getElementById('msgSearchInput');
     const searchResults = document.getElementById('msgSearchResults');
     let debounceTimer = null;
+    let searchQuery = '';
+    let searchOffset = 0;
+    let searchHasMore = false;
+    let isLoadingMore = false;
+    let searchObserver = null;
 
     if (!toggleBtn || !searchBar) return;
 
@@ -1276,20 +1551,38 @@ function _bindMessageSearchHandlers() {
             searchBar.dataset.open = 'false';
             if (searchResults) searchResults.style.display = 'none';
             searchInput.value = '';
+            searchQuery = '';
+            searchOffset = 0;
+            searchHasMore = false;
         }
     });
 
-    closeBtn.addEventListener('click', () => {
+    function _resetSearch() {
         searchBar.style.display = 'none';
         searchResults.style.display = 'none';
         searchInput.value = '';
-    });
+        searchQuery = '';
+        searchOffset = 0;
+        searchHasMore = false;
+        if (searchObserver) {
+            searchObserver.disconnect();
+            searchObserver = null;
+        }
+    }
+
+    closeBtn.addEventListener('click', _resetSearch);
 
     searchInput.addEventListener('input', (e) => {
         clearTimeout(debounceTimer);
-        const query = e.target.value.trim();
+        searchQuery = e.target.value.trim();
+        searchOffset = 0;
+        searchHasMore = false;
+        if (searchObserver) {
+            searchObserver.disconnect();
+            searchObserver = null;
+        }
         
-        if (!query) {
+        if (!searchQuery) {
             searchResults.style.display = 'none';
             return;
         }
@@ -1299,9 +1592,13 @@ function _bindMessageSearchHandlers() {
             if (!convId) return;
 
             try {
-                const res = await api(`/search/messages?conversation_id=${convId}&query=${encodeURIComponent(query)}`);
-                if (res?.success && res.data.length > 0) {
-                    _renderMessageSearchResults(res.data, query);
+                const res = await api(`/search/messages?conversation_id=${convId}&query=${encodeURIComponent(searchQuery)}&limit=20`);
+                if (res?.success && res.data.items && res.data.items.length > 0) {
+                    searchHasMore = res.data.has_more || false;
+                    searchOffset = res.data.items.length;
+                    _renderMessageSearchResults(res.data.items, searchQuery, false);
+                    // Re-attach observer for infinite scroll
+                    _attachSearchObserver();
                 } else {
                     searchResults.style.display = 'block';
                     searchResults.innerHTML = '<div style="padding: 15px; text-align: center; color: var(--color-text-secondary); font-size: 13px;">No messages found</div>';
@@ -1311,9 +1608,37 @@ function _bindMessageSearchHandlers() {
             }
         }, 300);
     });
+
+    function _attachSearchObserver() {
+        if (searchObserver) {
+            searchObserver.disconnect();
+            searchObserver = null;
+        }
+        if (!('IntersectionObserver' in window)) return;
+        searchObserver = new IntersectionObserver(async (entries) => {
+            if (entries[0].isIntersecting && searchHasMore && !isLoadingMore && searchQuery) {
+                isLoadingMore = true;
+                const convId = window.appState.activeConversationId;
+                if (!convId) return;
+                try {
+                    const res = await api(`/search/messages?conversation_id=${convId}&query=${encodeURIComponent(searchQuery)}&limit=20&offset=${searchOffset}`);
+                    if (res?.success && res.data.items && res.data.items.length > 0) {
+                        searchHasMore = res.data.has_more || false;
+                        searchOffset += res.data.items.length;
+                        _renderMessageSearchResults(res.data.items, searchQuery, true);
+                    } else {
+                        searchHasMore = false;
+                    }
+                } catch (err) {
+                    console.error(err);
+                }
+                isLoadingMore = false;
+            }
+        }, { root: searchResults, threshold: 0.1 });
+    }
 }
 
-function _renderMessageSearchResults(results, query) {
+function _renderMessageSearchResults(results, query, append = false) {
     const searchResults = document.getElementById('msgSearchResults');
     if (!searchResults) return;
 
@@ -1323,28 +1648,42 @@ function _renderMessageSearchResults(results, query) {
     const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`(${escapedQuery})`, 'gi');
 
-    searchResults.innerHTML = results.map(msg => {
-        const highlighted = escapeHTML(msg.content).replace(regex, '<mark>$1</mark>');
+    if (!append) {
+        searchResults.innerHTML = '';
+    }
+
+    const frag = document.createDocumentFragment();
+
+    results.forEach(msg => {
+        const highlighted = escapeHTML(msg.content || '').replace(regex, '<mark>$1</mark>');
         const date = new Date(msg.created_at);
         const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
         
-        return `
-            <div class="msg-search-result-item" data-id="${msg.id}">
-                <div class="msg-search-result-header">
-                    <span>${escapeHTML(msg.sender_name)}</span>
-                    <span>${dateStr}</span>
-                </div>
-                <div class="msg-search-result-content">${highlighted}</div>
+        const item = document.createElement('div');
+        item.className = 'msg-search-result-item';
+        item.dataset.id = msg.id;
+        item.innerHTML = `
+            <div class="msg-search-result-header">
+                <span>${escapeHTML(msg.sender_name)}</span>
+                <span>${dateStr}</span>
             </div>
+            <div class="msg-search-result-content">${highlighted}</div>
         `;
-    }).join('');
-
-    // Clicking a result
-    searchResults.querySelectorAll('.msg-search-result-item').forEach(item => {
         item.addEventListener('click', () => {
             document.getElementById('msgSearchBar').style.display = 'none';
             searchResults.style.display = 'none';
-            showToast('Result found! (Pagination scrolling coming soon)', 'info');
+            scrollToMessage(msg.id);
         });
+        frag.appendChild(item);
     });
+
+    searchResults.appendChild(frag);
+
+    // Scroll to top on fresh results
+    if (!append) {
+        searchResults.scrollTop = 0;
+    }
 }
+
+// NOTE: Duplicate _renderMessageSearchResults removed.
+// The version at line ~1434 (with append/infinite-scroll support) is the canonical one.

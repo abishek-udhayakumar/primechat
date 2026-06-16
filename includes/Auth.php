@@ -127,6 +127,11 @@ class Auth {
             $this->userModel->updateStatus($userId, 'offline');
         }
 
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $db = Database::getInstance();
+            $db->query("DELETE FROM user_sessions WHERE session_id = ?", [session_id()]);
+        }
+
         $_SESSION = [];
 
         if (ini_get('session.use_cookies')) {
@@ -164,10 +169,18 @@ class Auth {
         $_SESSION['username']   = $username;
         $_SESSION['_created']   = time();
         $_SESSION['_last_act']  = time();
+        $_SESSION['_last_regen'] = time();
         $_SESSION['ip']         = $_SERVER['REMOTE_ADDR'] ?? '';
         
         // Always regenerate CSRF token on session creation (privilege escalation)
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+
+        // Track session in DB for Active Sessions feature
+        $db = Database::getInstance();
+        $db->query(
+            "INSERT INTO user_sessions (user_id, session_id, user_agent, ip_address) VALUES (?, ?, ?, ?)",
+            [$userId, session_id(), $_SERVER['HTTP_USER_AGENT'] ?? '', $_SERVER['REMOTE_ADDR'] ?? '']
+        );
     }
 
     /**
@@ -196,6 +209,20 @@ class Auth {
             return false;
         }
 
+        // 4. Device logout check (DB session exists?)
+        $db = Database::getInstance();
+        $stmt = $db->query("SELECT id FROM user_sessions WHERE session_id = ?", [session_id()]);
+        if (!$stmt->fetch()) {
+            $this->logout(); // Force logout if session was deleted from DB
+            return false;
+        }
+
+        // Throttle DB updates for last_active to every 5 minutes
+        if (time() - ($_SESSION['_last_db_act'] ?? 0) > 300) {
+            $db->query("UPDATE user_sessions SET last_active = NOW() WHERE session_id = ?", [session_id()]);
+            $_SESSION['_last_db_act'] = time();
+        }
+
         $_SESSION['_last_act'] = time();
         return true;
     }
@@ -204,7 +231,13 @@ class Auth {
      * Get CSRF token for the current session
      */
     public function getCsrfToken(): ?string {
-        return $_SESSION['csrf_token'] ?? null;
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
     }
 
     /**

@@ -26,4 +26,8 @@ if (!$convModel->isParticipant($conversationId, $userId)) {
 $chat = new Chat();
 $chat->markAsRead($conversationId, $userId, $messageId);
 
+// Also update message statuses to 'read' in the messages table
+$msgModel = new Message();
+$msgModel->markRead($conversationId, $userId, $messageId);
+
 Response::success(null, 'Messages marked as read');

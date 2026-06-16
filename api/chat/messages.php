@@ -33,23 +33,10 @@ if (!$convModel->isParticipant($conversationId, $userId)) {
 $msgModel = new Message();
 $messages = $msgModel->getForConversation($conversationId, $userId, $afterId, $limit, $beforeId);
 
-// Get read status for sent messages
-$otherLastRead = $msgModel->getReadStatusBatch($conversationId, $userId);
-
-// Format messages
+// Format messages — use DB message_status as canonical source
 $formatted = [];
 foreach ($messages as $msg) {
     $item = Message::formatShorthand($msg, $userId);
-    
-    // Custom read status logic for history
-    if ($item['im']) {
-        if ($otherLastRead !== null && $otherLastRead >= $item['i']) {
-            $item['rs'] = 'read';
-        } else {
-            $item['rs'] = 'delivered';
-        }
-    }
-    
     $formatted[] = $item;
 }
 

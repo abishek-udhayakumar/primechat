@@ -29,4 +29,9 @@ $db->query(
     [$convId, $messageId]
 );
 
+notifyWsEvent('pin_updated', $convId, [
+    'action' => 'unpinned',
+    'message_id' => $messageId,
+]);
+
 Response::success(['conversation_id' => $convId, 'message_id' => $messageId], 'Message unpinned');

@@ -29,9 +29,12 @@ if (session_status() === PHP_SESSION_NONE) {
     if (!isset($_SESSION['_created'])) {
         $_SESSION['_created'] = time();
     } elseif (time() - $_SESSION['_created'] > 1800) {
-        // Regenerate every 30 minutes
-        session_regenerate_id(true);
-        $_SESSION['_created'] = time();
+        // Regenerate every 30 minutes — but skip if Auth just regenerated (prevents double-regen race)
+        if (time() - ($_SESSION['_last_regen'] ?? 0) > 60) {
+            session_regenerate_id(true);
+            $_SESSION['_created'] = time();
+            $_SESSION['_last_regen'] = time();
+        }
     }
 
     // Ensure a CSRF token always exists

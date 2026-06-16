@@ -109,9 +109,13 @@ if (isset($routes[$uri])) {
         $html = file_get_contents($viewFile);
         
         // Inject CSRF meta tag into <head>
-        $csrfTag = "\n    <meta name=\"csrf-token\" content=\"$csrfToken\">";
+        $csrfTag = "<meta name=\"csrf-token\" content=\"$csrfToken\">";
+        // Remove any existing hardcoded template tags
+        $html = str_replace('<meta name="csrf-token" content="<?= $csrf_token ?? \'\' ?>">', '', $html);
+        $html = preg_replace('/<meta name="csrf-token"[^>]*>/i', '', $html);
+        
         if (preg_match('/<head[^>]*>/i', $html, $matches)) {
-            $html = str_replace($matches[0], $matches[0] . $csrfTag, $html);
+            $html = str_replace($matches[0], $matches[0] . "\n    " . $csrfTag, $html);
         }
 
         // Inject VAPID public key meta tag if configured

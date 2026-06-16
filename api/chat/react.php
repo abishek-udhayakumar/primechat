@@ -67,8 +67,24 @@ function _handleToggle(int $userId): void {
         throw $e;
     }
 
+    // Get conversation_id for notification
+    $convStmt = $db->query("SELECT conversation_id FROM messages WHERE id = ?", [$messageId]);
+    $convRow = $convStmt->fetch();
+    $convId = $convRow ? (int)$convRow['conversation_id'] : 0;
+
     // Return updated reaction list for this message
     $reactions = _getReactionsForMessage($messageId, $userId);
+
+    // Notify WS subscribers
+    if ($convId) {
+        notifyWsEvent('reaction_updated', $convId, [
+            'message_id' => $messageId,
+            'reactions' => $reactions,
+            'user_id' => $userId,
+            'emoji' => $emoji,
+            'added' => $added,
+        ]);
+    }
 
     Response::success([
         'message_id' => $messageId,

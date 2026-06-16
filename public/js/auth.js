@@ -153,7 +153,13 @@ document.addEventListener('DOMContentLoaded', () => {
             display_name: (v) => v.trim().length < 2 ? 'Name is too short' : null,
             username: (v) => !/^[a-zA-Z0-9_]{3,50}$/.test(v) ? '3-50 chars, letters/numbers/underscores' : null,
             email: (v) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? 'Invalid email format' : null,
-            password: (v) => v.length < 6 ? 'Must be at least 6 characters' : null
+            password: (v) => {
+                if (v.length < 12) return 'Must be at least 12 characters';
+                if (!/[A-Z]/.test(v)) return 'Must contain an uppercase letter';
+                if (!/[a-z]/.test(v)) return 'Must contain a lowercase letter';
+                if (!/[0-9]/.test(v)) return 'Must contain a number';
+                return null;
+            }
         };
 
         // Live validation (debounced)
@@ -207,19 +213,30 @@ document.addEventListener('DOMContentLoaded', () => {
                     showSuccess('signupBtn');
                     localStorage.setItem('csrf_token', res.data.csrf_token);
 
-                    // Fetch profile in background
-                    api('/auth/profile', { method: 'GET' }).then(pRes => {
+                    // Fetch profile BEFORE redirect — app.js requires user in localStorage
+                    try {
+                        const pRes = await api('/auth/profile', { method: 'GET' });
                         if (pRes?.success) localStorage.setItem('user', JSON.stringify(pRes.data.user));
-                    }).catch(() => {});
+                    } catch (_) {}
 
                     setTimeout(() => { window.location.href = '/chat'; }, 600);
                 }
             } catch (err) {
                 if (err.name === 'AbortError') return;
-                const msg = err.message || '';
-                if (msg.toLowerCase().includes('username')) setFieldError('username', msg);
-                else if (msg.toLowerCase().includes('email')) setFieldError('email', msg);
-                else showError(msg || 'Failed to create account');
+                if (err.errors && Array.isArray(err.errors)) {
+                    err.errors.forEach(msg => {
+                        if (msg.toLowerCase().includes('username')) setFieldError('username', msg);
+                        else if (msg.toLowerCase().includes('email')) setFieldError('email', msg);
+                        else if (msg.toLowerCase().includes('password')) setFieldError('password', msg);
+                        else showError(msg);
+                    });
+                } else {
+                    const msg = err.message || '';
+                    if (msg.toLowerCase().includes('username')) setFieldError('username', msg);
+                    else if (msg.toLowerCase().includes('email')) setFieldError('email', msg);
+                    else if (msg.toLowerCase().includes('password')) setFieldError('password', msg);
+                    else showError(msg || 'Failed to create account');
+                }
                 setLoading('signupBtn', false);
             }
         });

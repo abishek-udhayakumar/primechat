@@ -33,13 +33,14 @@ window.initVoice = () => {
     let analyser = null;
     let microphone = null;
     let animationFrameId = null;
+    let _isRecording = false;
 
     voiceBtn.addEventListener('mousedown', startRecording);
     voiceBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
 
     // Stop on mouseup anywhere
-    document.addEventListener('mouseup', stopRecording);
-    document.addEventListener('touchend', stopRecording);
+    document.addEventListener('mouseup', () => { if (_isRecording) stopRecording(); });
+    document.addEventListener('touchend', () => { if (_isRecording) stopRecording(); });
 
     cancelBtn.addEventListener('click', cancelRecording);
 
@@ -53,6 +54,7 @@ window.initVoice = () => {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaRecorder = new MediaRecorder(stream);
             audioChunks = [];
+            _isRecording = true;
 
             // Setup Visualizer
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -132,6 +134,7 @@ window.initVoice = () => {
     }
 
     function stopRecording() {
+        _isRecording = false;
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
         }
@@ -139,6 +142,7 @@ window.initVoice = () => {
 
     function cancelRecording(e) {
         if (e) e.stopPropagation();
+        _isRecording = false;
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             audioChunks = [];
             mediaRecorder.stop();

@@ -36,8 +36,14 @@ if (!$convModel->isParticipant($conversationId, $userId)) {
 
 $db = Database::getInstance();
 
+// ── Auto-mark messages as DELIVERED when user polls (they are online/active) ──
+$msgModel = new Message();
+if ($lastId > 0) {
+    // User received messages up to lastId - mark them delivered
+    $msgModel->markDelivered($conversationId, $userId, $lastId);
+}
+
 // ── 1. New messages after last_id ──
-$msgModel   = new Message();
 $rawMessages = $msgModel->getForConversation($conversationId, $userId, $lastId > 0 ? $lastId : null, 50);
 
 // ── 2. Other user's last_read_message_id ──
@@ -48,23 +54,8 @@ $otherUser = $convModel->getOtherParticipant($conversationId, $userId);
 
 $messages = [];
 foreach ($rawMessages as $msg) {
-    if ($lastId > 0 && (int)$msg['id'] <= $lastId) continue;
-    
+    // Use the explicit message_status from DB
     $formatted = Message::formatShorthand($msg, $userId);
-    
-    if ($formatted['im']) {
-        if ($otherLastRead !== null && $otherLastRead >= $formatted['i']) {
-            $formatted['rs'] = 'read';
-        } else {
-            $isDelivered = false;
-            if ($otherUser && $otherUser['status'] === 'online') {
-                $isDelivered = true;
-            } elseif ($otherUser && $otherUser['last_seen'] && $msg['created_at']) {
-                $isDelivered = strtotime($otherUser['last_seen']) >= strtotime($msg['created_at']);
-            }
-            $formatted['rs'] = $isDelivered ? 'delivered' : 'sent';
-        }
-    }
     $messages[] = $formatted;
 }
 
@@ -73,12 +64,20 @@ $chat        = new Chat();
 $typingUsers = $chat->getTypingUsers($conversationId, $userId);
 
 // ── 5. Status Payload ──
+// Also return unread count for this conversation
+$unreadStmt = $db->query(
+    "SELECT unread_count FROM conversation_participants WHERE conversation_id = ? AND user_id = ?",
+    [$conversationId, $userId]
+);
+$unread = $unreadStmt->fetch();
+$unreadCount = $unread ? (int)$unread['unread_count'] : 0;
 
 Response::success([
-    'ms' => $messages,      // messages
-    'lr' => $otherLastRead, // last_read
+    'ms' => $messages,       // messages
+    'lr' => $otherLastRead,  // last_read
     'ty' => count($typingUsers) > 0, // typing
-    'tu' => $typingUsers,   // typing_users
+    'tu' => $typingUsers,    // typing_users
     'us' => $otherUser ? $otherUser['status'] : 'offline', // user_status
     'ls' => $otherUser ? $otherUser['last_seen'] : null,   // last_seen
+    'uc' => $unreadCount,    // unread_count
 ]);

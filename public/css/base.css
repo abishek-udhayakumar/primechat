@@ -151,6 +151,37 @@ button:focus-visible {
 
 .btn--full { width: 100%; }
 
+/* ── Icon Button ── */
+.icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+    flex-shrink: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+.icon-btn:hover {
+    background: var(--color-surface-hover);
+    color: var(--color-text-primary);
+}
+.icon-btn:active {
+    transform: scale(0.92);
+}
+.icon-btn svg {
+    width: 18px;
+    height: 18px;
+}
+.icon-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
 /* ── Avatar ── */
 .avatar {
     border-radius: var(--radius-full);

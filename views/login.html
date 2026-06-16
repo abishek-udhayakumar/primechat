@@ -32,10 +32,189 @@
       position: relative;
       z-index: 10;
       width: 100%;
-      max-width: 380px;
+      max-width: 400px;
       display: flex;
       flex-direction: column;
       align-items: stretch;
+    }
+    .auth-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: 24px;
+      padding: 36px 32px 32px;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.25), 0 1px 3px rgba(0, 0, 0, 0.1);
+      width: 100%;
+    }
+    .auth-logo {
+      width: 52px;
+      height: 52px;
+      border-radius: 18px;
+      background: linear-gradient(145deg, var(--color-bubble-sent-start) 0%, var(--color-bubble-sent-end) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(124, 106, 245, 0.30);
+      margin: 0 auto 6px;
+    }
+    .auth-logo svg {
+      width: 24px;
+      height: 24px;
+      color: #fff;
+    }
+    .auth-heading {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      color: var(--color-text-primary);
+      text-align: center;
+      margin: 12px 0 4px;
+    }
+    .auth-subheading {
+      font-size: 13px;
+      color: var(--color-text-secondary);
+      font-weight: 400;
+      text-align: center;
+      margin: 0 0 28px;
+    }
+    .auth-error-banner {
+      background: var(--color-danger-light);
+      border: 1px solid rgba(248,113,113,0.25);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--color-danger);
+      display: none;
+      margin-bottom: 16px;
+    }
+    .auth-error-banner.show { display: block; }
+    .form-floating {
+      position: relative;
+      margin-bottom: 4px;
+    }
+    .form-input {
+      width: 100%;
+      height: 50px;
+      padding: 0 16px;
+      padding-right: 44px;
+      background: var(--color-bg-input);
+      border: 1.5px solid var(--color-border);
+      border-radius: 14px;
+      color: var(--color-text-primary);
+      font-family: var(--font-primary);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+    }
+    .form-input:focus {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 3px rgba(124, 106, 245, 0.12);
+      background: var(--color-bg-elevated);
+    }
+    .form-input::placeholder { color: transparent; }
+    .form-input:placeholder-shown + .form-label {
+      transform: translateY(0);
+      font-size: 14px;
+      top: 16px;
+      color: var(--color-text-tertiary);
+    }
+    .form-label {
+      position: absolute;
+      left: 16px;
+      top: 8px;
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      pointer-events: none;
+      transition: all 150ms ease;
+      font-weight: 500;
+    }
+    .inline-error {
+      font-size: 11px;
+      color: var(--color-danger);
+      margin-top: 4px;
+      padding-left: 4px;
+      display: none;
+    }
+    .inline-error.show { display: block; }
+    .pw-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-text-tertiary);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: color 150ms ease, background 150ms ease;
+    }
+    .pw-toggle:hover {
+      color: var(--color-text-primary);
+      background: var(--color-surface-hover);
+    }
+    .pw-toggle svg {
+      width: 18px;
+      height: 18px;
+    }
+    .auth-submit {
+      width: 100%;
+      height: 50px;
+      border-radius: 14px;
+      background: var(--color-accent-gradient);
+      color: #fff;
+      font-family: var(--font-primary);
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(124, 106, 245, 0.30);
+      transition: transform 150ms ease, box-shadow 150ms ease, filter 150ms ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(124, 106, 245, 0.40);
+      filter: brightness(1.08);
+    }
+    .auth-submit:active {
+      transform: translateY(0) scale(0.98);
+    }
+    .auth-btn-loading, .auth-btn-success {
+      display: none;
+    }
+    .auth-submit.loading .auth-btn-text { display: none; }
+    .auth-submit.loading .auth-btn-loading { display: flex; align-items: center; gap: 8px; }
+    .auth-submit.success .auth-btn-text { display: none; }
+    .auth-submit.success .auth-btn-success { display: flex; align-items: center; gap: 8px; }
+    @keyframes scale-in {
+      from { transform: scale(0); }
+      to { transform: scale(1); }
+    }
+    .auth-footer {
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--color-text-tertiary);
+      margin-top: 24px;
+      font-weight: 400;
+    }
+    .auth-footer a {
+      color: var(--color-accent);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .auth-footer a:hover {
+      text-decoration: underline;
     }
     @media (max-width: 480px) {
       body { padding: 0; align-items: stretch; }
@@ -48,6 +227,8 @@
         display: flex;
         flex-direction: column;
         justify-content: center;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
       }
     }
   </style>
@@ -59,19 +240,17 @@
   <div class="auth-page-wrap">
     <div class="auth-card" id="authCard">
       <!-- Logo + heading -->
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:28px;text-align:center;">
-        <div style="width:48px;height:48px;border-radius:16px;background:linear-gradient(145deg,#7c6af5,#9d8eff);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(124,106,245,0.25);margin-bottom:4px;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        </div>
-        <h1 style="font-size:22px;font-weight:800;letter-spacing:-0.04em;color:#eeeef5;">Welcome back</h1>
-        <p style="font-size:13px;color:#8889a0;font-weight:400;">Sign in to continue to PrimeChat</p>
+      <div class="auth-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </div>
+      <h1 class="auth-heading">Welcome back</h1>
+      <p class="auth-subheading">Sign in to continue to PrimeChat</p>
 
       <!-- Global error -->
       <div class="auth-error-banner" id="authError"></div>
 
       <!-- Form -->
-      <form id="loginForm" novalidate style="display:flex;flex-direction:column;gap:12px;">
+      <form id="loginForm" novalidate>
         <div class="form-floating">
           <input type="text" id="identifier" name="identifier" class="form-input" placeholder=" " autocomplete="username" required>
           <label for="identifier" class="form-label">Email or Username</label>
@@ -87,7 +266,7 @@
           <div class="inline-error" id="passwordError"></div>
         </div>
 
-        <button type="submit" class="auth-submit" id="loginBtn" style="margin-top:4px;">
+        <button type="submit" class="auth-submit" id="loginBtn">
           <span class="auth-btn-text">Sign In</span>
           <span class="auth-btn-loading">
             <span class="spinner spinner--sm" style="border-color:rgba(255,255,255,.25);border-top-color:#fff;"></span>
@@ -100,9 +279,9 @@
         </button>
       </form>
 
-      <p style="text-align:center;font-size:12.5px;color:#8889a0;margin-top:24px;font-weight:400;">
+      <p class="auth-footer">
         Don't have an account?
-        <a href="/signup" style="color:#9d8eff;font-weight:600;">Create one →</a>
+        <a href="/signup">Create one →</a>
       </p>
     </div>
   </div>

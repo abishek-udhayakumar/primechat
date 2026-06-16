@@ -39,6 +39,12 @@ try {
         "INSERT IGNORE INTO pinned_messages (conversation_id, message_id, pinned_by) VALUES (?, ?, ?)",
         [$convId, $messageId, $userId]
     );
+    notifyWsEvent('pin_updated', $convId, [
+        'action' => 'pinned',
+        'message_id' => $messageId,
+        'pinned_by' => $userId,
+    ]);
+
     Response::success(['conversation_id' => $convId, 'message_id' => $messageId], 'Message pinned');
 } catch (\Exception $e) {
     Response::error('Failed to pin message', 500);

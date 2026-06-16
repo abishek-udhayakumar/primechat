@@ -56,6 +56,12 @@ if ($countStmt->fetch()['cnt'] === 0) {
     $db->query("DELETE FROM conversations WHERE id = ?", [$convId]);
 }
 
+// Notify WS subscribers
+notifyWsEvent('group_updated', $convId, [
+    'action' => 'removed',
+    'user_id' => $targetUserId,
+]);
+
 Response::success([
     'conversation_id' => $convId,
     'user_id' => $targetUserId,

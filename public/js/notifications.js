@@ -204,7 +204,10 @@ const Notifier = (() => {
         } catch (e) {
             if (e.name === 'AbortError') return;
         } finally {
-            const interval = document.visibilityState === 'visible' ? 5000 : 15000;
+            // When WS is connected, we can poll less aggressively
+            // WS broadcasts conv_update for immediate sidebar updates
+            const wsReduced = window._wsConnected ? 2 : 1;
+            const interval = (document.visibilityState === 'visible' ? 5000 : 15000) * wsReduced;
             _pollTimeout = setTimeout(_poll, interval);
         }
     }
@@ -216,11 +219,18 @@ const Notifier = (() => {
             type: c.t || 'direct',
             name: c.n || null,
             unread_count: c.uc ?? 0,
-            last_message: c.m ? { type: c.m.ty, content: c.m.c, sender_id: c.m.si } : null,
+            last_message: c.m ? { type: c.m.ty, content: c.m.c, sender_id: c.m.si, time: c.m.tm, is_mine: c.m.im } : null,
             _remapped: true
         };
         if (c.u) {
-            mapped.other_user = { display_name: c.u.n, id: c.u.i, status: c.u.s };
+            mapped.other_user = {
+                id: c.u.i,
+                username: c.u.u,
+                display_name: c.u.n,
+                avatar_url: c.u.a,
+                status: c.u.s,
+                last_seen: c.u.l || null,
+            };
         }
         return mapped;
     }

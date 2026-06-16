@@ -101,7 +101,7 @@ class Conversation {
                 other_user.username AS other_username,
                 other_user.display_name AS other_display_name,
                 other_user.avatar_url AS other_avatar_url,
-                other_user.status AS other_status,
+                IF(other_user.last_seen >= DATE_SUB(NOW(), INTERVAL 60 SECOND), 'online', 'offline') AS other_status,
                 other_user.last_seen AS other_last_seen,
                 -- Last message (denormalized via conversations.last_message_id)
                 last_msg.id AS last_message_id,
@@ -152,7 +152,7 @@ class Conversation {
      */
     public function getParticipants(int $conversationId): array {
         $stmt = $this->db->query(
-            "SELECT u.id, u.username, u.display_name, u.avatar_url, u.status, u.last_seen
+            "SELECT u.id, u.username, u.display_name, u.avatar_url, IF(u.last_seen >= DATE_SUB(NOW(), INTERVAL 60 SECOND), 'online', 'offline') AS status, u.last_seen
              FROM conversation_participants cp
              INNER JOIN users u ON u.id = cp.user_id
              WHERE cp.conversation_id = ?",
@@ -166,7 +166,7 @@ class Conversation {
      */
     public function getOtherParticipant(int $conversationId, int $currentUserId): ?array {
         $stmt = $this->db->query(
-            "SELECT u.id, u.username, u.display_name, u.avatar_url, u.about, u.status, u.last_seen
+            "SELECT u.id, u.username, u.display_name, u.avatar_url, u.about, IF(u.last_seen >= DATE_SUB(NOW(), INTERVAL 60 SECOND), 'online', 'offline') AS status, u.last_seen
              FROM conversation_participants cp
              INNER JOIN users u ON u.id = cp.user_id
              WHERE cp.conversation_id = ? AND cp.user_id != ?

@@ -72,7 +72,7 @@ class Chat {
     /**
      * Send a message to an existing conversation
      */
-    public function sendToConversation(int $senderId, int $conversationId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null, ?string $clientMsgId = null): array {
+    public function sendToConversation(int $senderId, int $conversationId, string $content, string $type = 'text', ?int $replyToId = null, ?int $forwardedFromId = null, ?string $clientMsgId = null, ?int $threadRootId = null): array {
         // Verify sender is a participant (read-only, outside transaction)
         if (!$this->conversationModel->isParticipant($conversationId, $senderId)) {
             return ['success' => false, 'error' => 'Not a participant'];
@@ -104,7 +104,7 @@ class Chat {
             }
 
             // Send message
-            $messageId = $this->messageModel->send($conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $clientMsgId, null, null);
+            $messageId = $this->messageModel->send($conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $clientMsgId, $threadRootId, null);
 
             // Update conversation
             $this->conversationModel->touch($conversationId);
@@ -224,6 +224,20 @@ class Chat {
      */
     public function markAsRead(int $conversationId, int $userId, int $messageId): void {
         $this->conversationModel->updateLastRead($conversationId, $userId, $messageId);
+        $this->messageModel->markRead($conversationId, $userId, $messageId);
+        $this->conversationModel->resetUnread($conversationId, $userId);
+    }
+
+    /**
+     * Mark messages as delivered (called when recipient comes online or polls)
+     */
+    public function markAsDelivered(int $conversationId, int $userId, int $upToMessageId): int {
+        $delivered = $this->messageModel->markDelivered($conversationId, $userId, $upToMessageId);
+        if ($delivered > 0) {
+            // Don't reset unread here - delivery != read
+            // Unread is only reset on read
+        }
+        return $delivered;
     }
 
     /**
@@ -238,6 +252,20 @@ class Chat {
             'other_user_last_seen' => $otherUser ? $otherUser['last_seen'] : null,
             'typing_users'         => $typingUsers,
         ];
+    }
+
+    /**
+     * Handle delivery acknowledgment from WebSocket client
+     */
+    public function acknowledgeDelivery(int $conversationId, int $userId, int $lastReceivedId): int {
+        return $this->messageModel->markDelivered($conversationId, $userId, $lastReceivedId);
+    }
+
+    /**
+     * Handle read receipt from WebSocket client
+     */
+    public function acknowledgeRead(int $conversationId, int $userId, int $lastReadId): void {
+        $this->markAsRead($conversationId, $userId, $lastReadId);
     }
 
     /**
@@ -269,13 +297,19 @@ class Chat {
             return ['success' => false, 'error' => 'Access denied to original message'];
         }
 
+        // Preserve all metadata including reply_to, thread_root, etc.
+        $replyToId = $original['reply_to_id'] ?? null;
+        $threadRootId = $original['thread_root_id'] ?? null;
+
         return $this->sendToConversation(
             $senderId,
             $targetConversationId,
             $original['content'],
             $original['type'],
-            null,
-            $messageId
+            $replyToId,
+            $messageId,
+            null, // client_msg_id - will be auto-generated
+            $threadRootId // pass thread_root_id
         );
     }
 }

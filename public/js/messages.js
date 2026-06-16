@@ -16,6 +16,7 @@ let _domMsgCount = 0;          // fast counter — avoids querySelectorAll on ev
 window.initMessages = () => {
     // Single delegated listener for context menu + reply clicks
     document.addEventListener('click', _handleDocClick, { passive: true });
+    document.addEventListener('contextmenu', _handleContextMenu);
     _bindContextMenuActions();
 };
 
@@ -23,6 +24,20 @@ window.initMessages = () => {
 // DELEGATED CLICK HANDLER
 // ─────────────────────────────────────────
 let _ctxMsg = null;
+
+function _handleContextMenu(e) {
+    const bubble = e.target.closest('.message-bubble');
+    if (bubble) {
+        const wrap = bubble.closest('.message[data-msg-id]');
+        if (wrap) {
+            const msg = window.appState.messages.find(m => m.id == wrap.dataset.msgId);
+            if (msg) {
+                e.preventDefault();
+                _showContextMenu(e, msg);
+            }
+        }
+    }
+}
 
 function _handleDocClick(e) {
     // Context menu trigger
@@ -383,8 +398,13 @@ function _buildContent(bubble, msg) {
         img.alt     = 'Image';
         img.loading = 'lazy';
         img.decoding = 'async';
+        img.onload = () => {
+            const c = document.getElementById('messagesContainer');
+            if (c && (c.scrollHeight - c.scrollTop - c.clientHeight < 120)) {
+                if (window.scrollToBottom) window.scrollToBottom(false);
+            }
+        };
 
-        img.decoding = 'async';
 
         if (msg.attachment._isUploading) {
             img.src = src; // local blob URL

@@ -49,6 +49,12 @@ $db->query(
     [$convId, $newUserId]
 );
 
+// Notify WS subscribers
+notifyWsEvent('group_updated', $convId, [
+    'action' => 'added',
+    'user_id' => $newUserId,
+]);
+
 Response::success([
     'conversation_id' => $convId,
     'user_id' => $newUserId,

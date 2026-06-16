@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
     last_seen       DATETIME     DEFAULT NULL,
     wallpaper       VARCHAR(100) DEFAULT 'default',
     theme           ENUM('light', 'dark') NOT NULL DEFAULT 'dark',
+    preferences     JSON         DEFAULT NULL,
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -89,6 +90,9 @@ CREATE TABLE IF NOT EXISTS messages (
     is_edited               TINYINT(1)   NOT NULL DEFAULT 0,
     is_deleted_for_everyone TINYINT(1)   NOT NULL DEFAULT 0,
     client_msg_id           VARCHAR(255) DEFAULT NULL,
+    message_status          ENUM('sending', 'sent', 'delivered', 'read') NOT NULL DEFAULT 'sending',
+    delivered_at            DATETIME     DEFAULT NULL,
+    read_at                 DATETIME     DEFAULT NULL,
     expires_at              DATETIME     DEFAULT NULL,
     created_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -97,6 +101,8 @@ CREATE TABLE IF NOT EXISTS messages (
     INDEX idx_conv_id (conversation_id, id),
     INDEX idx_sender (sender_id),
     INDEX idx_reply (reply_to_id),
+    INDEX idx_msg_status (message_status),
+    INDEX idx_conv_status_id (conversation_id, message_status, id),
     UNIQUE INDEX idx_messages_client_msg_id (client_msg_id),
     FULLTEXT INDEX ft_messages_content (content),
 
@@ -279,3 +285,35 @@ CREATE TABLE IF NOT EXISTS typing_status (
     CONSTRAINT fk_ts_conversation FOREIGN KEY (conversation_id)
         REFERENCES conversations(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- BLOCKED USERS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS blocked_users (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id         INT UNSIGNED NOT NULL,
+    blocked_user_id INT UNSIGNED NOT NULL,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_user_blocked (user_id, blocked_user_id),
+    CONSTRAINT fk_blocked_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_blocked_target FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- USER SESSIONS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id         INT UNSIGNED NOT NULL,
+    session_id      VARCHAR(255) NOT NULL,
+    user_agent      VARCHAR(500) DEFAULT NULL,
+    ip_address      VARCHAR(45)  DEFAULT NULL,
+    last_active     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uk_session_id (session_id),
+    INDEX idx_user_sessions (user_id),
+    CONSTRAINT fk_session_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+

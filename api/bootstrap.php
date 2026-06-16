@@ -91,6 +91,35 @@ require_once __DIR__ . '/../includes/RateLimiter.php';
 // NOTE: Schema migrations must be run via `php scripts/migrate.php` during deployment.
 RateLimiter::check();
 
+// Helper: write a WebSocket notification event for real-time broadcasting
+function notifyWsEvent(string $eventType, int $conversationId, array $payload = []): void {
+    try {
+        $db = Database::getInstance();
+        $db->query(
+            "INSERT INTO ws_notifications (event_type, conversation_id, payload) VALUES (?, ?, ?)",
+            [$eventType, $conversationId, json_encode($payload)]
+        );
+    } catch (\Throwable $e) {
+        Logger::warning('Failed to write ws_notification: ' . $e->getMessage());
+    }
+}
+
+// Auto-create ws_notifications table if it doesn't exist (first request after deploy)
+try {
+    $db = Database::getInstance();
+    $db->query(
+        "CREATE TABLE IF NOT EXISTS ws_notifications (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            event_type VARCHAR(50) NOT NULL,
+            conversation_id INT NOT NULL,
+            payload TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+} catch (\Throwable $e) {
+    Logger::warning('Failed to create ws_notifications table: ' . $e->getMessage());
+}
+
 // Load models & core logic
 require_once __DIR__ . '/../includes/Sanitizer.php';
 require_once __DIR__ . '/../includes/User.php';
@@ -108,7 +137,7 @@ $isAuthAction  = str_contains($requestUri, '/api/auth/');
 if (!$isHealthCheck && $_SERVER['REQUEST_METHOD'] !== 'GET' && $_SERVER['REQUEST_METHOD'] !== 'OPTIONS') {
     $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     $sessionToken = $auth->getCsrfToken();
-    $csrfValid = !empty($token) && $token === $sessionToken;
+    $csrfValid = !empty($token) && !empty($sessionToken) && hash_equals($sessionToken, $token);
 
     if (!$csrfValid) {
         Logger::error('CSRF token mismatch debug', [

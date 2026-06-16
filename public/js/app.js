@@ -72,6 +72,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     window.appState.user = res.data.user;
                     localStorage.setItem('user', JSON.stringify(res.data.user));
                     initApp();
+                } else {
+                    // Session invalid — clear stale data, redirect
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('csrf_token');
+                    window.location.href = '/login';
                 }
             } else if (window.location.pathname === '/' || window.location.pathname === '/login' || window.location.pathname === '/signup') {
                 window.location.href = '/chat';
@@ -139,10 +144,8 @@ function initApp() {
         if (!_uploadLoaded) {
             e.stopImmediatePropagation();
             await _ensureUpload();
-            // After init, trigger file input directly
-            document.getElementById('fileInput')?.click();
+            // Module loaded — user clicks again, upload.js handler runs with conversation check
         }
-        // If already loaded, upload.js's own listener handles it
     });
     // Also lazy-load on drag-over the entire app
     document.querySelector('.chat-app')?.addEventListener('dragover', () => _ensureUpload(), { once: true, passive: true });
@@ -165,13 +168,13 @@ function initApp() {
     document.getElementById('sidebarProfileTrigger')?.addEventListener('click', async (e) => {
         if (!_profileLoaded) {
             e.stopImmediatePropagation();
-            await _loadModule('/js/profile.js');
-            if (window.initProfile) window.initProfile();
+            await _loadModule('/js/settings.js');
+            if (window.SettingsEngine) window.SettingsEngine.init();
             _profileLoaded = true;
-            // After init, open directly rather than re-clicking
-            if (window.openProfile) window.openProfile();
+            if (window.SettingsEngine) window.SettingsEngine.openSettings();
+        } else {
+            if (window.SettingsEngine) window.SettingsEngine.openSettings();
         }
-        // If already loaded, profile.js's own listener handles it
     });
 
     // ── Image lazy loading via IntersectionObserver ──
@@ -240,16 +243,23 @@ function initApp() {
 
     // ── V3: Session Management ── (opened from profile panel)
     window._loadSessionManager = async () => {
-        // Sessions UI is handled by profile.js
-        if (!window.openProfile) {
-            await _loadModule('/js/profile.js');
-            if (window.initProfile) window.initProfile();
+        // Sessions UI is handled by settings.js
+        if (!window.SettingsEngine) {
+            await _loadModule('/js/settings.js');
         }
-        if (window.openProfile) window.openProfile('sessions');
+        if (window.SettingsEngine) window.SettingsEngine.openView('settingsSecurityView');
     };
 }
 
 function applyThemeAndWallpaper(user) {
     document.documentElement.setAttribute('data-theme', user.theme || 'dark');
     window.appState.wallpaper = user.wallpaper || 'default';
+    
+    // Apply font size preference
+    if (user.preferences && user.preferences.font_size) {
+        const fs = user.preferences.font_size;
+        document.documentElement.style.fontSize = fs === 'small' ? '14px' : (fs === 'large' ? '18px' : '16px');
+    } else {
+        document.documentElement.style.fontSize = '16px';
+    }
 }

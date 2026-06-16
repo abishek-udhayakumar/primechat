@@ -82,7 +82,9 @@ async function api(endpoint, options = {}, retryCount = 0) {
                 await new Promise(r => setTimeout(r, delay));
                 return api(endpoint, options, retryCount + 1);
             }
-            throw new Error(data.error || 'Something went wrong');
+            const err = new Error(data.error || 'Something went wrong');
+            if (data.errors) err.errors = data.errors;
+            throw err;
         }
         
         return data;

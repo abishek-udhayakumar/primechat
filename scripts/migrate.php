@@ -360,5 +360,26 @@ function runMigrations(): void {
         echo "[—] Migration 16: direct_conversation_lookup table already exists\n";
     }
 
+    // Migration 17: message_status, delivered_at, read_at columns on messages
+    $colCheck = $db->query(
+        "SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'messages' AND COLUMN_NAME = 'message_status'",
+        [DB_NAME]
+    )->fetch();
+    if (!$colCheck || $colCheck['cnt'] == 0) {
+        $db->query("ALTER TABLE messages ADD COLUMN message_status ENUM('sending', 'sent', 'delivered', 'read') NOT NULL DEFAULT 'sent' AFTER client_msg_id");
+        $db->query("ALTER TABLE messages ADD COLUMN delivered_at DATETIME DEFAULT NULL AFTER message_status");
+        $db->query("ALTER TABLE messages ADD COLUMN read_at DATETIME DEFAULT NULL AFTER delivered_at");
+        // Add indexes for status queries
+        $db->query("ALTER TABLE messages ADD INDEX idx_msg_status (message_status)");
+        $db->query("ALTER TABLE messages ADD INDEX idx_conv_status_id (conversation_id, message_status, id)");
+        echo "[✓] Migration 17: added message_status, delivered_at, read_at columns to messages\n";
+
+        // Backfill existing messages: status = 'sent' (already default), 'delivered' if participant has delivered, 'read' if read
+        // For now, all existing messages stay as 'sent' (safe default)
+    } else {
+        echo "[—] Migration 17: message_status column already exists\n";
+    }
+
     echo "\nAll migrations completed.\n";
 }

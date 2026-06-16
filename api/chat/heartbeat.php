@@ -24,7 +24,7 @@ $totalUnread = (int) ($unreadStmt->fetch()['total'] ?? 0);
 
 // 2. Latest message ID across all conversations
 $latestStmt = $db->query(
-    "SELECT MAX(id) as max_id FROM messages m
+    "SELECT MAX(m.id) as max_id FROM messages m
      INNER JOIN conversation_participants cp ON m.conversation_id = cp.conversation_id
      WHERE cp.user_id = ?
      AND NOT EXISTS (

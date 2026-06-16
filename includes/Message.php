@@ -29,14 +29,14 @@ class Message {
             $expiresAt = date('Y-m-d H:i:s', time() + $expiresIn);
         }
 
-        $this->db->query(
-            "INSERT IGNORE INTO messages (conversation_id, sender_id, content, type, reply_to_id, forwarded_from_id, thread_root_id, client_msg_id, expires_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        $stmt = $this->db->query(
+            "INSERT IGNORE INTO messages (conversation_id, sender_id, content, type, reply_to_id, forwarded_from_id, thread_root_id, client_msg_id, expires_at, message_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent')",
             [$conversationId, $senderId, $content, $type, $replyToId, $forwardedFromId, $threadRootId, $clientMsgId, $expiresAt]
         );
         
         // If INSERT IGNORE returned 0 affected rows, it was a duplicate — fetch existing
-        if ($clientMsgId && $this->db->getConnection()->rowCount() === 0) {
+        if ($clientMsgId && $stmt->rowCount() === 0) {
             $existing = $this->findByClientMsgId($clientMsgId, $senderId);
             if ($existing) {
                 return (int) $existing['id'];
@@ -77,7 +77,7 @@ class Message {
      * Supports fetching only new messages after a given ID
      */
     public function getForConversation(int $conversationId, int $userId, ?int $afterId = null, int $limit = 50, ?int $beforeId = null): array {
-        $params = [$conversationId, $userId];
+        $params = [$userId, $conversationId, $userId];
         $conditions = "m.conversation_id = ?
             AND NOT EXISTS (
                 SELECT 1 FROM message_deletions md
@@ -93,9 +93,6 @@ class Message {
             $conditions .= " AND m.id < ?";
             $params[] = $beforeId;
         }
-
-        // Extra param for reactions subquery (needs current user)
-        $params[] = $userId;
 
         $params[] = $limit;
 
@@ -117,6 +114,9 @@ class Message {
                 m.is_edited,
                 m.is_deleted_for_everyone,
                 m.client_msg_id,
+                m.message_status,
+                m.delivered_at,
+                m.read_at,
                 m.expires_at,
                 m.created_at,
                 m.updated_at,
@@ -213,6 +213,9 @@ class Message {
             $reactions = json_decode($msg['reactions_json'], true);
         }
 
+        // Use explicit message_status from DB if available, fallback to computed
+        $status = $msg['message_status'] ?? 'sent';
+
         return [
             'i'  => (int)$msg['id'],
             'ci' => (int)$msg['conversation_id'],
@@ -231,10 +234,92 @@ class Message {
             'tr' => !empty($msg['thread_root_id']) ? (int)$msg['thread_root_id'] : null,
             'tc' => (int)($msg['thread_reply_count'] ?? 0),
             'ex' => $msg['expires_at'] ?? null,
-            'rs' => 'sent', // placeholder, updated by caller if needed
+            'rs' => $status,
+            'da' => $msg['delivered_at'] ?? null,
+            'ra' => $msg['read_at'] ?? null,
             'ca' => $msg['created_at'],
             'cm' => $msg['client_msg_id'] ?? null,
         ];
+    }
+
+    /**
+     * Update message status with valid transitions only.
+     * Valid transitions: sending -> sent -> delivered -> read
+     * Prevents regression (e.g., read -> delivered).
+     */
+    public function updateStatus(int $messageId, string $newStatus, int $conversationId): bool {
+        $validTransitions = [
+            'sending'   => ['sent'],
+            'sent'      => ['delivered'],
+            'delivered' => ['read'],
+            'read'      => [], // terminal state
+        ];
+
+        // Get current status
+        $stmt = $this->db->query(
+            "SELECT message_status FROM messages WHERE id = ? AND conversation_id = ?",
+            [$messageId, $conversationId]
+        );
+        $current = $stmt->fetch();
+        if (!$current) return false;
+
+        $currentStatus = $current['message_status'];
+        if (!isset($validTransitions[$currentStatus]) || !in_array($newStatus, $validTransitions[$currentStatus])) {
+            // Allow idempotent updates (same status) but prevent regression
+            if ($currentStatus === $newStatus) return true;
+            return false;
+        }
+
+        $updates = ['message_status = ?'];
+        $params = [$newStatus, $messageId, $conversationId];
+
+        if ($newStatus === 'delivered') {
+            $updates[] = 'delivered_at = NOW()';
+        } elseif ($newStatus === 'read') {
+            $updates[] = 'read_at = NOW()';
+        }
+
+        $this->db->query(
+            "UPDATE messages SET " . implode(', ', $updates) . " WHERE id = ? AND conversation_id = ?",
+            $params
+        );
+        return true;
+    }
+
+    /**
+     * Mark messages as delivered for a recipient.
+     * Updates all messages in conversation up to given message_id.
+     */
+    public function markDelivered(int $conversationId, int $recipientId, int $upToMessageId): int {
+        $stmt = $this->db->query(
+            "UPDATE messages
+             SET message_status = 'delivered', delivered_at = NOW()
+             WHERE conversation_id = ?
+               AND sender_id != ?
+               AND id <= ?
+               AND message_status IN ('sending', 'sent')
+               AND is_deleted_for_everyone = 0",
+            [$conversationId, $recipientId, $upToMessageId]
+        );
+        return $stmt->rowCount();
+    }
+
+    /**
+     * Mark messages as read for a recipient.
+     * Updates all messages in conversation up to given message_id.
+     */
+    public function markRead(int $conversationId, int $recipientId, int $upToMessageId): int {
+        $stmt = $this->db->query(
+            "UPDATE messages
+             SET message_status = 'read', read_at = NOW()
+             WHERE conversation_id = ?
+               AND sender_id != ?
+               AND id <= ?
+               AND message_status IN ('sending', 'sent', 'delivered')
+               AND is_deleted_for_everyone = 0",
+            [$conversationId, $recipientId, $upToMessageId]
+        );
+        return $stmt->rowCount();
     }
 
     /**
@@ -300,7 +385,8 @@ class Message {
             "SELECT
                 m.id, m.conversation_id, m.sender_id, m.content, m.type,
                 m.reply_to_id, m.forwarded_from_id, m.is_edited,
-                m.is_deleted_for_everyone, m.client_msg_id, m.created_at, m.updated_at,
+                m.is_deleted_for_everyone, m.client_msg_id, m.message_status,
+                m.delivered_at, m.read_at, m.created_at, m.updated_at,
                 u.username AS sender_username,
                 u.display_name AS sender_display_name,
                 u.avatar_url AS sender_avatar_url,

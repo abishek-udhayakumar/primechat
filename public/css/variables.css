@@ -53,12 +53,15 @@
     --radius-bubble-tail: 4px;
 
     /* ── Shadows ── */
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
-    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.2);
-    --shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.3);
-    --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.3);
-    --shadow-glow-success: 0 0 20px rgba(34, 197, 94, 0.3);
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.10), 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.18), 0 4px 8px rgba(0, 0, 0, 0.06);
+    --shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.25), 0 8px 16px rgba(0, 0, 0, 0.08);
+    --shadow-2xl: 0 32px 80px rgba(0, 0, 0, 0.35);
+    --shadow-glow: 0 0 24px rgba(124, 106, 245, 0.35);
+    --shadow-glow-success: 0 0 24px rgba(34, 197, 94, 0.3);
+    --shadow-inner: inset 0 1px 2px rgba(0, 0, 0, 0.06);
 
     /* ── Transitions ── */
     --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -90,106 +93,118 @@
 
 /* ── Dark Theme (Default) ── */
 [data-theme="dark"], :root {
-    --color-bg-primary: #0a0a0f;
-    --color-bg-secondary: #111118;
-    --color-bg-tertiary: #1a1a24;
-    --color-bg-elevated: #1e1e2a;
-    --color-bg-hover: #252533;
-    --color-bg-active: #2d2d3f;
-    --color-bg-input: #16161f;
+    --color-bg-primary: #07070d;
+    --color-bg-secondary: #0e0e18;
+    --color-bg-tertiary: #151520;
+    --color-bg-elevated: #1a1a28;
+    --color-bg-hover: #222233;
+    --color-bg-active: #2a2a3e;
+    --color-bg-input: #11111e;
 
     --color-surface: rgba(255, 255, 255, 0.03);
     --color-surface-hover: rgba(255, 255, 255, 0.06);
-    --color-surface-active: rgba(255, 255, 255, 0.09);
+    --color-surface-active: rgba(255, 255, 255, 0.10);
 
-    --color-text-primary: #f5f5f8;
-    --color-text-secondary: #a0a0b5;
-    --color-text-tertiary: #6b6b80;
-    --color-text-inverse: #0a0a0f;
+    --color-text-primary: #f0f0f7;
+    --color-text-secondary: #9898b0;
+    --color-text-tertiary: #5e5e78;
+    --color-text-inverse: #07070d;
 
-    --color-border: rgba(255, 255, 255, 0.1);
-    --color-border-hover: rgba(255, 255, 255, 0.18);
-    --color-border-focus: rgba(99, 102, 241, 0.5);
+    --color-border: rgba(255, 255, 255, 0.08);
+    --color-border-hover: rgba(255, 255, 255, 0.16);
+    --color-border-focus: rgba(124, 106, 245, 0.5);
 
-    /* Accent / Brand */
-    --color-accent: #6366f1;
-    --color-accent-hover: #7577f5;
-    --color-accent-light: rgba(99, 102, 241, 0.15);
-    --color-accent-gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
-    --color-accent-rgb: 99, 102, 241;
+    /* Accent / Brand — Electric Violet (richer than indigo) */
+    --color-accent: #7c6af5;
+    --color-accent-hover: #8e7eff;
+    --color-accent-light: rgba(124, 106, 245, 0.15);
+    --color-accent-gradient: linear-gradient(135deg, #7c6af5 0%, #9d8eff 100%);
+    --color-accent-rgb: 124, 106, 245;
 
     /* Semantic */
     --color-success: #22c55e;
-    --color-success-light: rgba(34, 197, 94, 0.15);
+    --color-success-light: rgba(34, 197, 94, 0.12);
     --color-warning: #f59e0b;
-    --color-warning-light: rgba(245, 158, 11, 0.15);
-    --color-danger: #ef4444;
-    --color-danger-light: rgba(239, 68, 68, 0.15);
-    --color-info: #3b82f6;
-    --color-info-light: rgba(59, 130, 246, 0.15);
+    --color-warning-light: rgba(245, 158, 11, 0.12);
+    --color-danger: #f87171;
+    --color-danger-light: rgba(248, 113, 113, 0.12);
+    --color-info: #60a5fa;
+    --color-info-light: rgba(96, 165, 250, 0.12);
 
-    /* Chat Bubbles */
-    --color-bubble-sent: #6366f1;
+    /* Chat Bubbles — sent gets premium gradient, received gets glass */
+    --color-bubble-sent-start: #7c6af5;
+    --color-bubble-sent-end: #9d8eff;
     --color-bubble-sent-text: #ffffff;
-    --color-bubble-received: #1e1e2a;
-    --color-bubble-received-text: #f0f0f5;
+    --color-bubble-received: rgba(255, 255, 255, 0.05);
+    --color-bubble-received-text: #e8e8f0;
+    --color-bubble-received-border: rgba(255, 255, 255, 0.06);
+    --color-bubble-received-glow: rgba(124, 106, 245, 0.06);
 
     /* Online Status */
-    --color-online: #22c55e;
-    --color-offline: #5c5c6e;
-    --color-away: #f59e0b;
+    --color-online: #34d399;
+    --color-offline: #4a4a60;
+    --color-away: #fbbf24;
 
     /* Glassmorphism */
-    --glass-bg: rgba(17, 17, 24, 0.8);
-    --glass-border: rgba(255, 255, 255, 0.08);
-    --glass-blur: 20px;
+    --glass-bg: rgba(14, 14, 24, 0.80);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-blur: 24px;
 
     /* Chat Wallpapers */
-    --wallpaper-default: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 60%),
-                         radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+    --wallpaper-default: radial-gradient(ellipse at 20% 50%, rgba(124, 106, 245, 0.08) 0%, transparent 65%),
+                         radial-gradient(ellipse at 80% 20%, rgba(157, 142, 255, 0.05) 0%, transparent 55%),
                          var(--color-bg-primary);
 
     /* Scrollbar */
-    --scrollbar-thumb: rgba(255, 255, 255, 0.1);
+    --scrollbar-thumb: rgba(255, 255, 255, 0.08);
     --scrollbar-track: transparent;
 }
 
 /* ── Light Theme ── */
 [data-theme="light"] {
-    --color-bg-primary: #f8f9fc;
+    --color-bg-primary: #f5f6fa;
     --color-bg-secondary: #ffffff;
-    --color-bg-tertiary: #f0f2f5;
+    --color-bg-tertiary: #eef0f4;
     --color-bg-elevated: #ffffff;
-    --color-bg-hover: #f0f2f5;
-    --color-bg-active: #e4e6eb;
-    --color-bg-input: #f0f2f5;
+    --color-bg-hover: #eef0f4;
+    --color-bg-active: #e2e4ea;
+    --color-bg-input: #eef0f4;
 
     --color-surface: rgba(0, 0, 0, 0.02);
     --color-surface-hover: rgba(0, 0, 0, 0.04);
-    --color-surface-active: rgba(0, 0, 0, 0.06);
+    --color-surface-active: rgba(0, 0, 0, 0.07);
 
-    --color-text-primary: #1a1a2e;
-    --color-text-secondary: #555570;
-    --color-text-tertiary: #808095;
+    --color-text-primary: #141428;
+    --color-text-secondary: #4c4c68;
+    --color-text-tertiary: #7c7c95;
     --color-text-inverse: #ffffff;
 
-    --color-border: rgba(0, 0, 0, 0.1);
-    --color-border-hover: rgba(0, 0, 0, 0.18);
-    --color-border-focus: rgba(99, 102, 241, 0.5);
+    --color-border: rgba(0, 0, 0, 0.08);
+    --color-border-hover: rgba(0, 0, 0, 0.16);
+    --color-border-focus: rgba(124, 106, 245, 0.5);
 
-    --color-bubble-received: #f0f2f5;
-    --color-bubble-received-text: #1a1a2e;
+    --color-accent: #7c6af5;
+    --color-accent-hover: #6d5de8;
+    --color-accent-light: rgba(124, 106, 245, 0.10);
+    --color-accent-gradient: linear-gradient(135deg, #7c6af5 0%, #9d8eff 100%);
+    --color-accent-rgb: 124, 106, 245;
 
-    --glass-bg: rgba(255, 255, 255, 0.85);
-    --glass-border: rgba(0, 0, 0, 0.08);
+    --color-bubble-received: #ffffff;
+    --color-bubble-received-text: #141428;
+    --color-bubble-received-border: rgba(0, 0, 0, 0.06);
+    --color-bubble-received-glow: rgba(124, 106, 245, 0.04);
 
-    --wallpaper-default: radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 60%),
-                         radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+    --glass-bg: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(0, 0, 0, 0.06);
+
+    --wallpaper-default: radial-gradient(ellipse at 20% 50%, rgba(124, 106, 245, 0.05) 0%, transparent 60%),
+                         radial-gradient(ellipse at 80% 20%, rgba(157, 142, 255, 0.04) 0%, transparent 50%),
                          var(--color-bg-primary);
 
-    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
-    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.1);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.04);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08), 0 4px 8px rgba(0, 0, 0, 0.04);
+    --shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.10);
 
-    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb: rgba(0, 0, 0, 0.12);
 }

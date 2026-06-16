@@ -44,6 +44,7 @@ let _channel        = null;
 let _flushTimer     = null;
 let _leaderPingTimer= null;
 let _dbInstance     = null;
+let _receivedPong   = false;
 
 // ─────────────────────────────────────────
 // PUBLIC API
@@ -268,6 +269,7 @@ async function _startLeaderElection() {
         }
 
         if (type === 'PONG') {
+            _receivedPong = true;
             if (_isLeader) return; // Already leader, ignore
             // Another tab responded — it's the leader
             _isLeader = false;
@@ -290,7 +292,9 @@ async function _startLeaderElection() {
 
     // If no PONG after 1.5s, claim leadership
     await _sleep(1500);
-    _claimLeadership();
+    if (!_receivedPong) {
+        _claimLeadership();
+    }
 }
 
 function _claimLeadership() {

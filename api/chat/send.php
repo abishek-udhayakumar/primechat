@@ -27,10 +27,33 @@ if (empty($content) && $type === 'text') {
     Response::error('Message content is required', 422);
 }
 
+// ── Resolve conversation ──
+$chat        = new Chat();
+$convModel   = new Conversation();
+
+// ── Check blocked users ──
+$otherUserId = null;
+if ($conversationId) {
+    $otherUser = $convModel->getOtherParticipant($conversationId, $userId);
+    $otherUserId = $otherUser['id'] ?? null;
+} elseif ($recipientId) {
+    $otherUserId = $recipientId;
+}
+
+if ($otherUserId) {
+    $db = Database::getInstance();
+    $stmt = $db->query(
+        "SELECT 1 FROM blocked_users 
+         WHERE (user_id = ? AND blocked_user_id = ?) 
+            OR (user_id = ? AND blocked_user_id = ?)",
+        [$userId, $otherUserId, $otherUserId, $userId]
+    );
+    if ($stmt->fetch()) {
+        Response::error('You cannot send a message to this user. They may be blocked.', 403);
+    }
+}
+
 try {
-    // ── Resolve conversation ──
-    $chat        = new Chat();
-    $convModel   = new Conversation();
 
     if ($conversationId) {
         if (!$convModel->isParticipant($conversationId, $userId)) {
@@ -56,15 +79,13 @@ try {
     // ── Fetch full message (with attachment + reply JOINs) ──
     $msgModel       = new Message();
     $msg            = $msgModel->findByIdFull($messageId);
-    $otherLastRead  = $msgModel->getReadStatusBatch($conversationId, $userId);
 
     $formattedMessage = null;
 
     if ($msg) {
         $formattedMessage = Message::formatShorthand($msg, $userId);
-        if ($formattedMessage['im']) {
-            $formattedMessage['rs'] = ($otherLastRead !== null && $otherLastRead >= $formattedMessage['i'] ? 'read' : 'delivered');
-        }
+        // Status comes from the DB message_status column ('sent' initially)
+        // Delivery/read updates happen through delivery_ack/read_receipt mechanisms
     }
 
     // Send push notifications to offline participants
